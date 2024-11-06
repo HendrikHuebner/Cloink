@@ -1,2 +1,6 @@
 homework/*
 build/*
+test.sh
+compile_commands.json
+vscode
+.cache

@@ -7,7 +7,7 @@
 #include <optional>
 
 enum TokenType {
-    Identifier,
+    IdentifierType,
     NumberLiteral,
     EndOfFile,
     Unknown,
@@ -52,6 +52,7 @@ enum TokenType {
     BracketR,
     BracketL,
     SizeSpec,
+    Comma,
     EndOfStatement,
 };
 
@@ -64,7 +65,7 @@ struct Token {
     };
 
     Token(const Token& token) : type(token.type) {
-        if (type == TokenType::Identifier) {
+        if (type == TokenType::IdentifierType) {
             this->identifier = token.identifier;
         } else if (type == TokenType::NumberLiteral) {
             this->value = token.value;
@@ -72,7 +73,7 @@ struct Token {
     };
 
     void operator=(const Token& other) {
-        if (type == TokenType::Identifier) {
+        if (type == TokenType::IdentifierType) {
             this->identifier = other.identifier;
         } else if (type == TokenType::NumberLiteral) {
             this->value = other.value;
@@ -84,7 +85,7 @@ struct Token {
     Token(TokenType type) : type(type) {}
 
     Token(TokenType type, std::string& identifier) : type(type), identifier(identifier) {
-        assert(type == TokenType::Identifier);
+        assert(type == TokenType::IdentifierType);
     }
 
     Token(TokenType type, uint64_t value) : type(type), value(value) {
@@ -102,9 +103,11 @@ class TokenStream {
    public:
     explicit TokenStream(const std::string& input) : input(input), position(0) {}
 
-    Token next();
+    [[maybe_unused]] Token next();
 
     Token peek();
+
+    bool empty();
 
     std::string getCurrentLine() const { return ""; }
 

@@ -1,29 +1,30 @@
-CXX = g++
-CXXFLAGS = -O3 -Wall -Wextra -std=c++20
-DEBUGFLAGS = -O0 -g3 -Wall -Wextra -Wpedantic -std=c++20
-LOGLEVEL ?= 1
+SRC_DIR = ./src
+BUILD_DIR = ./build
 
-SRC = main.cpp lexer.cpp parser.cpp
-OBJ = $(SRC:.cpp=.o)
-TARGET = bc0
-DEBUG_TARGET = bc0_debug
+SRCS = $(wildcard $(SRC_DIR)/*.cpp)
+OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
 
-.PHONY: all clean debug
+CXX = clang++
+CXXFLAGS = -Wall -Wextra -O2
+DEBUGFLAGS = -g -O0
+
+TARGET = $(BUILD_DIR)/bc0
 
 all: $(TARGET)
 
-$(TARGET): $(OBJ)
-	$(CXX) $(CXXFLAGS) -DLOGLEVEL=$(LOGLEVEL) -o build/$@ $(OBJ)
+$(TARGET): $(OBJS)
+	$(CXX) $(OBJS) -o $(TARGET)
 
-debug: CXXFLAGS := $(DEBUGFLAGS)
-debug: LOGLEVEL := 3
-debug: $(DEBUG_TARGET)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(DEBUG_TARGET): $(OBJ)
-	$(CXX) $(DEBUGFLAGS) -DLOGLEVEL=$(LOGLEVEL) -o build/$@ $(OBJ)
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -DLOGLEVEL=$(LOGLEVEL) -c src/$< -o build/$@
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
 clean:
-	rm -f $(OBJ) $(TARGET) $(DEBUG_TARGET)
+	rm -rf $(BUILD_DIR)/*.o $(TARGET)
+
+debug: CXXFLAGS += $(DEBUGFLAGS)
+debug: all
+
+.PHONY: all clean debug

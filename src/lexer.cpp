@@ -2,6 +2,7 @@
 #include <optional>
 #include <stdexcept>
 #include <unordered_map>
+#include <iostream>
 
 #include "lexer.hpp"
 
@@ -33,7 +34,7 @@ Token TokenStream::next() {
     }
 
     char c = moveToNextToken();
-
+    std::cout << c <<": ";
     if (position >= input.size()) {
         return {TokenType::EndOfFile};
     }
@@ -55,6 +56,8 @@ Token TokenStream::next() {
 }
 
 Token TokenStream::peek() {
+
+
     if (top.has_value()) {
         top = std::nullopt;
         return top.value();
@@ -65,9 +68,11 @@ Token TokenStream::peek() {
     return next;
 }
 
-char TokenStream::moveToNextToken() {
-    char c;
+bool TokenStream::empty() {
+    return this->peek().type == TokenType::EndOfFile;
+}
 
+char TokenStream::moveToNextToken() {
     while (position < input.size()) {
         char c = input[position];
 
@@ -210,12 +215,13 @@ Token TokenStream::lexWord() {
     }
 
     std::string lexeme = input.substr(start, position - start);
+    std::cout << lexeme;
 
     if (keywords.find(lexeme) != keywords.end()) {
         return {keywords.at(lexeme)};
     }
 
-    return {TokenType::Identifier, lexeme};
+    return {TokenType::IdentifierType, lexeme};
 }
 
 Token TokenStream::lexNumber() {

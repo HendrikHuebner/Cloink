@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -26,6 +27,7 @@ std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
 }
 
 class DiagnosticsManager {
+    public:
 
     std::string unknownToken(const TokenStream& ts, const Token& token) {
         std::string line = ts.getCurrentLine();
@@ -38,7 +40,8 @@ class DiagnosticsManager {
         exit(EXIT_FAILURE);
     }
 
-    std::string parsingError() {
-
+    std::string parsingError(Token token) {
+        std::cerr << "Parsing Error" << std::endl;
+        exit(EXIT_FAILURE);
     }
 };
