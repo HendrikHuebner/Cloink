@@ -4,16 +4,16 @@ BUILD_DIR = ./build
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
 
-CXX = clang++
-CXXFLAGS = -Wall -Wextra -O2
-DEBUGFLAGS = -g -O0
+CXX = g++
+CXXFLAGS = -Wall -Wextra -fsanitize=undefined
+DEBUGFLAGS = -g3 -O0 -fsanitize=undefined 
 
 TARGET = $(BUILD_DIR)/bc0
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(OBJS) -o $(TARGET)
+	$(CXX) $(OBJS) -fsanitize=undefined -o $(TARGET)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@

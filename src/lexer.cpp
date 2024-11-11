@@ -1,16 +1,63 @@
 #include <cctype>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
-#include <iostream>
 
 #include "lexer.hpp"
 
+std::string Token::to_string() const {
+    switch(this->type) {
+        case IdentifierType: return this->getIdentifier();
+        case NumberLiteral: return std::to_string(this->getValue());
+        case EndOfFile: return "EOF";
+        case Unknown: return "Unknown";
+        case OpPlus: return "+";
+        case OpMinus: return "-";
+        case OpMultiply: return "*";
+        case OpDivide: return "/";
+        case OpModulo: return "%";
+        case OpBitNot: return "~";
+        case OpBitAnd: return "&";
+        case OpBitOr: return "|";
+        case OpBitXor: return "^";
+        case OpShiftLeft: return ">>";
+        case OpShiftRight: return "<<";
+        case OpNot: return "!";
+        case OpOr: return "||";
+        case OpAnd: return "&&";
+        case OpGreaterThan: return ">";
+        case OpLessThan: return "<";
+        case OpGreaterEq: return ">=";
+        case OpLessEq: return "<=";
+        case OpEquals: return "==";
+        case OpNotEquals: return "!=";
+        case OpAssign: return "=";
+        case KeyAuto: return "auto";
+        case KeyRegister: return "register";
+        case KeyIf: return "if";
+        case KeyElse: return "else";
+        case KeyWhile: return "while";
+        case KeyReturn: return "return";
+        case ParenthesisR: return "(";
+        case ParenthesisL: return ")";
+        case BraceR: return "{";
+        case BraceL: return "}";
+        case BracketR: return "[";
+        case BracketL: return "]";
+        case SizeSpec: return "@";
+        case Comma: return ",";
+        case EndOfStatement: return ";";
+    }
+
+    return "";
+} 
+
 static const std::unordered_map<std::string, TokenType> keywords = {
-    {"number", TokenType::KeyNumber},     {"auto", TokenType::KeyAuto},
+    {"auto", TokenType::KeyAuto}, {"return", TokenType::KeyReturn},
     {"register", TokenType::KeyRegister}, {"if", TokenType::KeyIf},
     {"else", TokenType::KeyElse},         {"while", TokenType::KeyWhile},
-    {"return", TokenType::KeyReturn},
+    
 };
 
 static inline bool isBaseChar(char c) {
@@ -28,15 +75,9 @@ static inline bool isPunctuationChar(char c) {
 }
 
 Token TokenStream::next() {
-    if (top.has_value()) {
-        top = std::nullopt;
-        return top.value();
-    }
-
     char c = moveToNextToken();
-    std::cout << c <<": ";
-    if (position >= input.size()) {
-        return {TokenType::EndOfFile};
+    if (position >= input.size() || c == 0) {
+        return Token(TokenType::EndOfFile);
     }
 
     if (std::isalpha(c) || c == '_') {
@@ -50,26 +91,24 @@ Token TokenStream::next() {
 
     } else if (isPunctuationChar(c)) {
         return lexPunctuationChar();
-    }
 
-    return {TokenType::Unknown};
+    } else {
+        position++;
+        return {TokenType::Unknown};
+    }
 }
 
 Token TokenStream::peek() {
-
-
-    if (top.has_value()) {
-        top = std::nullopt;
-        return top.value();
-    }
-
+    int current = position;
     Token next = this->next();
-    this->top = next;
+    position = current;
+
+    //this->top = std::make_optional<Token>(next);
     return next;
 }
 
 bool TokenStream::empty() {
-    return this->peek().type == TokenType::EndOfFile;
+    return position >= input.size();
 }
 
 char TokenStream::moveToNextToken() {
@@ -199,6 +238,8 @@ Token TokenStream::lexOperator() {
         }
     }
 
+    position++;
+
     if (!op.has_value()) {
         return {TokenType::Unknown};
 
@@ -215,7 +256,6 @@ Token TokenStream::lexWord() {
     }
 
     std::string lexeme = input.substr(start, position - start);
-    std::cout << lexeme;
 
     if (keywords.find(lexeme) != keywords.end()) {
         return {keywords.at(lexeme)};
@@ -234,7 +274,7 @@ Token TokenStream::lexNumber() {
 }
 
 Token TokenStream::lexPunctuationChar() {
-    switch (input[position]) {
+    switch (input[position++]) {
         case ';':
             return TokenType::EndOfStatement;
         case '(':
@@ -254,6 +294,4 @@ Token TokenStream::lexPunctuationChar() {
         default:
             throw std::runtime_error("Invalid punctuation character!");
     }
-
-    position++;
 }

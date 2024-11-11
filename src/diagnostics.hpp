@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdlib>
 #include <iostream>
 #include <ostream>
@@ -5,6 +7,7 @@
 #include "lexer.hpp"
 
 class DiagnosticError {
+
     const std::string& line;
     const int lineNum;
     const int linePosition;
@@ -17,10 +20,11 @@ class DiagnosticError {
   friend std::ostream& operator<<(std::ostream& os, const DiagnosticError& err);
 };
 
-std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
-    os << "ERROR! line " << err.lineNum << ": " << std::endl;
+inline std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
+    os << "error in line " << err.lineNum << ": ";
+    os << err.message << std::endl;
     os << err.line << std::endl;
-    std::string indent(err.linePosition - 1, '-');
+    std::string indent(err.linePosition, '-');
     os << indent << '^' << std::endl;
 
     return os;
@@ -28,20 +32,25 @@ std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
 
 class DiagnosticsManager {
     public:
-
-    std::string unknownToken(const TokenStream& ts, const Token& token) {
+    std::string unknownToken(const TokenStream& ts) {
         std::string line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
 
-        DiagnosticError error(line, lineNum, linePosition);
+        DiagnosticError error(line, lineNum, linePosition, "Unknown Token");
         std::cerr << error << std::endl;
 
         exit(EXIT_FAILURE);
     }
 
-    std::string parsingError(Token token) {
-        std::cerr << "Parsing Error" << std::endl;
+    std::string parsingError(const TokenStream& ts, const Token& token) {
+        std::string line = ts.getCurrentLine();
+        int lineNum = ts.getCurrentLineNumber();
+        int linePosition = ts.getLinePosition();
+        
+        DiagnosticError error(line, lineNum, linePosition, "Unexpected Token \"" + token.to_string() + "\"");
+        std::cerr << error << std::endl;
+
         exit(EXIT_FAILURE);
     }
 };

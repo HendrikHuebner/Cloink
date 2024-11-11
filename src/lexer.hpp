@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <optional>
+#include <variant>
 
 enum TokenType {
     IdentifierType,
@@ -36,7 +37,6 @@ enum TokenType {
     OpAssign,
 
     // keywords
-    KeyNumber,
     KeyAuto,
     KeyRegister,
     KeyIf,
@@ -58,50 +58,55 @@ enum TokenType {
 
 struct Token {
     TokenType type;
+    std::variant<std::monostate, std::string, uint64_t> data;
 
-    union {
-        std::string identifier;
-        uint16_t value;
-    };
-
-    Token(const Token& token) : type(token.type) {
-        if (type == TokenType::IdentifierType) {
-            this->identifier = token.identifier;
-        } else if (type == TokenType::NumberLiteral) {
-            this->value = token.value;
-        }
-    };
-
-    void operator=(const Token& other) {
-        if (type == TokenType::IdentifierType) {
-            this->identifier = other.identifier;
-        } else if (type == TokenType::NumberLiteral) {
-            this->value = other.value;
-        }
-    }
-
-    ~Token() {}
-
-    Token(TokenType type) : type(type) {}
-
-    Token(TokenType type, std::string& identifier) : type(type), identifier(identifier) {
+    Token(TokenType type, const std::string& identifier)
+        : type(type), data(identifier) {
         assert(type == TokenType::IdentifierType);
     }
 
-    Token(TokenType type, uint64_t value) : type(type), value(value) {
+    Token(TokenType type, uint64_t value)
+        : type(type), data(value) {
         assert(type == TokenType::NumberLiteral);
     }
+
+    Token(TokenType type)
+        : type(type), data(std::monostate()) {}
+
+    Token(const Token& other) : type(other.type), data(other.data) {}
+
+    Token& operator=(const Token& other) {
+        if (this != &other) {
+            type = other.type;
+            data = other.data;
+        }
+        return *this;
+    }
+
+    ~Token() = default;
+
+    const std::string& getIdentifier() const {
+        assert(type == TokenType::IdentifierType);
+        return std::get<std::string>(data);
+    }
+
+    uint64_t getValue() const {
+        assert(type == TokenType::NumberLiteral);
+        return std::get<uint64_t>(data);
+    }
+
+    std::string to_string() const;
 };
 
 class TokenStream {
     const std::string input;
-    size_t position;
-    size_t line;
-    size_t lineStart;
-    std::optional<Token> top;
+    size_t position = 0;
+    size_t line = 0;
+    size_t lineStart = 0;
+    std::optional<Token> top = std::nullopt;
     
    public:
-    explicit TokenStream(const std::string& input) : input(input), position(0) {}
+    explicit TokenStream(const std::string input) : input(input), position(0) {}
 
     [[maybe_unused]] Token next();
 
@@ -109,7 +114,7 @@ class TokenStream {
 
     bool empty();
 
-    std::string getCurrentLine() const { return ""; }
+    std::string getCurrentLine() const { return input.substr(lineStart, position + 1); }
 
     size_t getCurrentLineNumber() const { return line; }
 
