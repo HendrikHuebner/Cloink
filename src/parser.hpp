@@ -5,15 +5,12 @@
 #include "lexer.hpp"
 #include "ast.hpp"
 
-class DiagnosticsManager;
-
 class Parser {
     
     TokenStream& ts;
-    DiagnosticsManager& dm;
 
   public:
-    Parser(TokenStream& ts, DiagnosticsManager& dm) : ts(ts), dm(dm) {}
+    Parser(TokenStream& ts) : ts(ts) {}
 
     AbstractSyntaxTree parseProgram() {
         std::vector<std::unique_ptr<Function>> functions;

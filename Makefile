@@ -8,7 +8,7 @@ CXX = g++
 CXXFLAGS = -Wall -Wextra -fsanitize=undefined
 DEBUGFLAGS = -g3 -O0 -fsanitize=undefined 
 
-TARGET = $(BUILD_DIR)/bc0
+TARGET = bc0
 
 all: $(TARGET)
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#define LOGLEVEL 5
+#define LOGLEVEL 0
 
 #if LOGLEVEL > 0
 #include <iostream>

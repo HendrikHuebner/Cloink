@@ -1,17 +1,18 @@
 #include <cctype>
+#include <cstdlib>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 
 #include "lexer.hpp"
+#include "diagnostics.hpp"
 
 std::string Token::to_string() const {
     switch(this->type) {
         case IdentifierType: return this->getIdentifier();
         case NumberLiteral: return std::to_string(this->getValue());
         case EndOfFile: return "EOF";
-        case Unknown: return "Unknown";
         case OpPlus: return "+";
         case OpMinus: return "-";
         case OpMultiply: return "*";
@@ -71,7 +72,7 @@ static inline bool isOperator(char c) {
 
 static inline bool isPunctuationChar(char c) {
     return c == ';' || c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']' ||
-           c == '@';
+           c == '@' || c == ',';
 }
 
 Token TokenStream::next() {
@@ -94,7 +95,9 @@ Token TokenStream::next() {
 
     } else {
         position++;
-        return {TokenType::Unknown};
+        
+        diagnostics.unknownToken(*this);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -241,7 +244,8 @@ Token TokenStream::lexOperator() {
     position++;
 
     if (!op.has_value()) {
-        return {TokenType::Unknown};
+        diagnostics.unknownToken(*this);
+        exit(EXIT_FAILURE);
 
     } else {
         return {op.value()};
@@ -291,6 +295,8 @@ Token TokenStream::lexPunctuationChar() {
             return TokenType::BraceR;
         case '@':
             return TokenType::SizeSpec;
+        case ',':
+            return TokenType::Comma;
         default:
             throw std::runtime_error("Invalid punctuation character!");
     }

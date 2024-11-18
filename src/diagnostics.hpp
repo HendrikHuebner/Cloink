@@ -32,7 +32,7 @@ inline std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
 
 class DiagnosticsManager {
     public:
-    std::string unknownToken(const TokenStream& ts) {
+    void unknownToken(const TokenStream& ts) const {
         std::string line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
@@ -43,7 +43,7 @@ class DiagnosticsManager {
         exit(EXIT_FAILURE);
     }
 
-    std::string parsingError(const TokenStream& ts, const Token& token) {
+    void parsingError(const TokenStream& ts, const Token& token) const {
         std::string line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
@@ -54,3 +54,5 @@ class DiagnosticsManager {
         exit(EXIT_FAILURE);
     }
 };
+
+const DiagnosticsManager diagnostics;

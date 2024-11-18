@@ -11,7 +11,6 @@ enum TokenType {
     IdentifierType,
     NumberLiteral,
     EndOfFile,
-    Unknown,
 
     // Operators
     OpPlus,
