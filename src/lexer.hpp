@@ -117,7 +117,7 @@ class TokenStream {
 
     size_t getCurrentLineNumber() const { return line; }
 
-    size_t getLinePosition() const { return position - lineStart; }
+    size_t getLinePosition() const { return position - lineStart - 1; }
 
    private:
     char moveToNextToken();

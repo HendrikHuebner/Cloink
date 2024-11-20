@@ -4,6 +4,7 @@
 #include <iostream>
 #include <ostream>
 #include <string>
+#include "ast.hpp"
 #include "lexer.hpp"
 
 class DiagnosticError {
@@ -31,7 +32,15 @@ inline std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
 }
 
 class DiagnosticsManager {
+    bool _isError = false;
+
     public:
+
+    static DiagnosticsManager get() {
+        static DiagnosticsManager instance;
+        return instance;
+    }
+    
     void unknownToken(const TokenStream& ts) const {
         std::string line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
@@ -43,16 +52,30 @@ class DiagnosticsManager {
         exit(EXIT_FAILURE);
     }
 
-    void parsingError(const TokenStream& ts, const Token& token) const {
+    void unexpectedToken(const TokenStream& ts, const Token& token, const std::string& expected = "") {
         std::string line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
         
-        DiagnosticError error(line, lineNum, linePosition, "Unexpected Token \"" + token.to_string() + "\"");
+        DiagnosticError error(line, lineNum, linePosition, "Unexpected Token \"" + token.to_string() + "\"" + 
+            (expected.empty() ? "" : ", expected " + expected + "."));
+            
         std::cerr << error << std::endl;
+        _isError = true;
+    }
 
-        exit(EXIT_FAILURE);
+    void error(const TokenStream& ts, const std::string& msg = "") {
+        std::string line = ts.getCurrentLine();
+        int lineNum = ts.getCurrentLineNumber();
+        int linePosition = ts.getLinePosition();
+        
+        DiagnosticError error(line, lineNum, linePosition, msg + ".");
+            
+        std::cerr << error << std::endl;
+        _isError = true;
+    } 
+    
+    bool isError() {
+        return _isError;
     }
 };
-
-const DiagnosticsManager diagnostics;

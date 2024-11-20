@@ -40,12 +40,12 @@ std::string Token::to_string() const {
         case KeyElse: return "else";
         case KeyWhile: return "while";
         case KeyReturn: return "return";
-        case ParenthesisR: return "(";
-        case ParenthesisL: return ")";
-        case BraceR: return "{";
-        case BraceL: return "}";
-        case BracketR: return "[";
-        case BracketL: return "]";
+        case ParenthesisR: return ")";
+        case ParenthesisL: return "(";
+        case BraceR: return "}";
+        case BraceL: return "{";
+        case BracketR: return "]";
+        case BracketL: return "[";
         case SizeSpec: return "@";
         case Comma: return ",";
         case EndOfStatement: return ";";
@@ -76,6 +76,12 @@ static inline bool isPunctuationChar(char c) {
 }
 
 Token TokenStream::next() {
+    if (top) {
+        Token token = top.value();
+        top = std::nullopt;
+        return token;
+    }
+
     char c = moveToNextToken();
     if (position >= input.size() || c == 0) {
         return Token(TokenType::EndOfFile);
@@ -96,22 +102,23 @@ Token TokenStream::next() {
     } else {
         position++;
         
-        diagnostics.unknownToken(*this);
+        DiagnosticsManager::get().unknownToken(*this);
         exit(EXIT_FAILURE);
     }
 }
 
 Token TokenStream::peek() {
-    int current = position;
-    Token next = this->next();
-    position = current;
+    if (top) {
+        return top.value();
+    }
 
-    //this->top = std::make_optional<Token>(next);
+    Token next = this->next();
+    this->top = std::make_optional<Token>(next);
     return next;
 }
 
 bool TokenStream::empty() {
-    return position >= input.size();
+    return this->peek().type == TokenType::EndOfFile;
 }
 
 char TokenStream::moveToNextToken() {
@@ -244,7 +251,7 @@ Token TokenStream::lexOperator() {
     position++;
 
     if (!op.has_value()) {
-        diagnostics.unknownToken(*this);
+        DiagnosticsManager::get().unknownToken(*this);
         exit(EXIT_FAILURE);
 
     } else {

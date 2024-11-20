@@ -4,6 +4,7 @@
 #include <fstream>
 #include "ast.hpp"
 #include "debug.hpp"
+#include "diagnostics.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 
@@ -34,6 +35,8 @@ int main(int argc, char* argv[]) {
     ss << f.rdbuf();
     std::string program = ss.str();
 
+    std::cerr << "prog: \"" << program << "\"" << std::endl;
+
     TokenStream ts(program);
     Parser parser(ts);
 
@@ -49,5 +52,9 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    if (DiagnosticsManager::get().isError()) {
+        return EXIT_FAILURE;
+    }
+    
     return EXIT_SUCCESS;
 }

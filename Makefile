@@ -5,15 +5,15 @@ SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
 
 CXX = g++
-CXXFLAGS = -Wall -Wextra -fsanitize=undefined
-DEBUGFLAGS = -g3 -O0 -fsanitize=undefined 
+CXXFLAGS = -Wall -Wextra -Wno-unused-parameter -fsanitize=address -std=c++20
+DEBUGFLAGS = -g3 -O0 -fsanitize=address 
 
 TARGET = bc0
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(OBJS) -fsanitize=undefined -o $(TARGET)
+	$(CXX) $(OBJS) -fsanitize=address -o $(TARGET)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@

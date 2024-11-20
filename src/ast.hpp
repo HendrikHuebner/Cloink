@@ -45,13 +45,15 @@ struct ASTNode {
 
 struct Expression : public ASTNode {};
 
-struct Identifier : Expression {
+struct LValue : public Expression {};
+
+struct Identifier : LValue {
     std::string name;
 
     Identifier(const std::string& name) : name(name) {}
 
     std::string to_string() const override {
-        return "(Identifier " + name + ")";
+        return name;
     }
 };
 
@@ -61,7 +63,7 @@ struct IntLiteral : Expression {
     IntLiteral(uint64_t value) : value(value) {}
 
     std::string to_string() const override {
-        return "(Number " + std::to_string(value) + ")";
+        return std::to_string(value);
     }
 };
 
@@ -74,7 +76,7 @@ struct BinOp : Expression {
         : op(op), leftExpr(std::move(left)), rightExpr(std::move(right)) {}
 
     std::string to_string() const override {
-        return "(BinOp " + opToString(op) + " " + leftExpr->to_string() + " " + rightExpr->to_string() + ")";
+        return "(" + opToString(op) + " " + leftExpr->to_string() + " " + rightExpr->to_string() + ")";
     }
 };
 
@@ -86,7 +88,7 @@ struct UnOp : Expression {
         : op(op), expr(std::move(expr)) {}
 
     std::string to_string() const override {
-        return "(UnOp " + opToString(op) + " " + expr->to_string() + ")";
+        return "(" + opToString(op) + " " + expr->to_string() + ")";
     }
 };
 
@@ -108,7 +110,7 @@ struct FunctionCall : Expression {
     }
 };
 
-struct IndexExpr : Expression {
+struct IndexExpr : LValue {
     std::unique_ptr<Expression> array;
     std::unique_ptr<Expression> idx;
     int sizeSpec;
@@ -117,7 +119,7 @@ struct IndexExpr : Expression {
         : array(std::move(array)), idx(std::move(idx)), sizeSpec(sizeSpec) {}
 
     std::string to_string() const override {
-        return "(IndexExpr " + array->to_string() + " " + idx->to_string() + " " + std::to_string(sizeSpec) + ")";
+        return "(IndexExpr " + array->to_string() + " [" + idx->to_string() + "@" + std::to_string(sizeSpec) + "] )";
     }
 };
 
