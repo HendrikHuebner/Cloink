@@ -8,6 +8,8 @@
 #include "lexer.hpp"
 #include "diagnostics.hpp"
 
+using namespace clonk;
+
 std::string Token::to_string() const {
     switch(this->type) {
         case IdentifierType: return this->getIdentifier();

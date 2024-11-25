@@ -1,6 +1,7 @@
 
 #include <cstdlib>
 #include <memory>
+#include <string>
 #include <utility>
 #include "ast.hpp"
 #include "lexer.hpp"
@@ -8,16 +9,12 @@
 #include "diagnostics.hpp"
 #include "debug.hpp"
 
-// for scope checking
-static const int AUTO_FLAG = 0x1;
-static const int REGISTER_FLAG = 0x2;
-static const int PARAM_FLAG = 0x4;
+using namespace clonk;
 
 void Parser::matchToken(TokenType type, const std::string& expected) {
     Token token = ts.next();
 
     if (token.type != type) {
-        //debug("Did not match token types: %d %d \n", type, token.type);
         DiagnosticsManager::get().unexpectedToken(ts, token, expected);
     }
 }
@@ -26,7 +23,6 @@ Identifier Parser::matchIdentifier() {
     Token token = ts.next();
 
     if (token.type != TokenType::IdentifierType) {
-        //debug("Did not match Identifier: %d %d \n", token.type);
         DiagnosticsManager::get().unexpectedToken(ts, token);
         exit(EXIT_FAILURE);
     }
@@ -92,7 +88,7 @@ std::unique_ptr<Expression> Parser::parseTerm() {
             Token token = ts.peek();
             expr = parseValue(true);
             
-            auto scopedIdent = scopes.getIdentifier(token.getIdentifier());
+            auto scopedIdent = scopes.get(token.getIdentifier());
             if (scopedIdent->isRegister) {
                 DiagnosticsManager::get().error(ts, "cannot reference register type \"" + token.getIdentifier() + "\"");
             }
@@ -132,7 +128,7 @@ std::unique_ptr<Expression> Parser::parseTerm() {
         }
         default: {
             ts.next();
-            debug("Unexpected Token: \n", next);
+            logger::warn("Unexpected Token: \n", next);
             DiagnosticsManager::get().unexpectedToken(ts, ts.peek());
             exit(EXIT_FAILURE);
         }
@@ -156,7 +152,7 @@ std::unique_ptr<Expression> Parser::parseExpression() {
             return expr;
 
         if (precedence < 0) {
-            debug("Expected BinOp token: %d %d \n", op.type);
+            logger::debug("Expected BinOp token: %d %d \n", op.type);
             DiagnosticsManager::get().unexpectedToken(ts, op);
             exit(EXIT_FAILURE);
         }
@@ -213,14 +209,14 @@ std::vector<Identifier> Parser::parseParamlist() {
 
     if (ts.peek().type == TokenType::IdentifierType) {
         Identifier ident = matchIdentifier();
-        scopes.addIdentifier(ident.name, false, true);
+        scopes.insert(ident.name, false, true);
         params.push_back(ident);
     }
 
     while (ts.peek().type == TokenType::Comma) {
         matchToken(TokenType::Comma, "parameter seperator comma");
         Identifier ident = matchIdentifier();
-        if (!scopes.addIdentifier(ident.name, false, true)) {
+        if (!scopes.insert(ident.name, false, true)) {
             DiagnosticsManager::get().error(ts, "duplicate function parameter: \"" + ident.name + "\"");
         }
 
@@ -265,7 +261,7 @@ std::unique_ptr<Expression> Parser::parseValue(bool lvalue) {
         }
 
     } else {
-        if (!scopes.getIdentifier(ident.name)) {
+        if (!scopes.get(ident.name)) {
             DiagnosticsManager::get().error(ts, "unknown identifier: \"" + ident.name + "\"");
         }
 
@@ -284,14 +280,12 @@ std::unique_ptr<Expression> Parser::parseValue(bool lvalue) {
             Token sizeSpec = ts.next();
 
             if (sizeSpec.type != TokenType::NumberLiteral) {
-                debug("Invalid sizespec: \n", sizeSpec.type);
+                logger::warn("Invalid sizespec: \n", sizeSpec.type);
                 DiagnosticsManager::get().unexpectedToken(ts, sizeSpec);
                 exit(EXIT_FAILURE);
 
             } else if (sizeSpec.getValue() != 1 && sizeSpec.getValue() != 2 && sizeSpec.getValue() != 4 && sizeSpec.getValue() != 8) {
-            
-                debug("Invalid sizespec, must be 1, 2, 4 or 8: \n", sizeSpec.getValue());
-                DiagnosticsManager::get().unexpectedToken(ts, sizeSpec);
+                DiagnosticsManager::get().unexpectedToken(ts, sizeSpec, "Invalid sizespec, must be 1, 2, 4 or 8, was " + std::to_string(sizeSpec.getValue()));
                 exit(EXIT_FAILURE);
             }
 
@@ -317,7 +311,7 @@ std::unique_ptr<Statement> Parser::parseDeclStatement() {
         std::unique_ptr<Expression> expr = parseExpression();
         matchToken(TokenType::EndOfStatement, "\";\"");
 
-        if (!scopes.addIdentifier(ident.name, type == TokenType::KeyRegister, false)) {
+        if (!scopes.insert(ident.name, type == TokenType::KeyRegister, false)) {
             DiagnosticsManager::get().error(ts, "redeclared identifier \"" + ident.name + "\"");
         }
 

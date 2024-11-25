@@ -1,11 +1,13 @@
 #pragma once
 
 #include <string>
-#define LOGLEVEL 0
+#define LOGLEVEL 2
 
 #if LOGLEVEL > 0
 #include <iostream>
 #endif
+
+namespace logger {
 
 template<typename... Args>
 void debug(const std::string& msg, Args... args) {
@@ -26,4 +28,6 @@ void warn(const std::string& msg, Args... args) {
 #if LOGLEVEL > 0
     std::printf(msg.c_str(), args...);
 #endif
+}
+
 }

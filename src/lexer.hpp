@@ -7,6 +7,8 @@
 #include <optional>
 #include <variant>
 
+namespace clonk {
+
 enum TokenType {
     IdentifierType,
     NumberLiteral,
@@ -127,3 +129,5 @@ class TokenStream {
     Token lexNumber();
     Token lexPunctuationChar();
 };
+
+} // end namespace clonk

@@ -7,6 +7,8 @@
 #include "ast.hpp"
 #include "lexer.hpp"
 
+namespace clonk {
+
 class DiagnosticError {
 
     const std::string& line;
@@ -79,3 +81,5 @@ class DiagnosticsManager {
         return _isError;
     }
 };
+
+} // end namespace clonk

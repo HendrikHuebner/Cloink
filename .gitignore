@@ -1,6 +1,10 @@
-homework/*
-build/*
 test.sh
 compile_commands.json
-vscode
+.vscode
 .cache
+test_ast.sh
+test_ir.sh
+test.txt
+bc*
+build
+homework

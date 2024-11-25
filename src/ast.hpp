@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <stack>
+#include <unordered_map>
 #include <vector>
 #include <string>
 #include "lexer.hpp"
@@ -10,6 +12,8 @@
 #include <vector>
 #include <optional>
 #include <sstream>
+
+namespace clonk {
 
 inline std::string opToString(TokenType op) {
     switch (op) {
@@ -37,6 +41,78 @@ inline std::string opToString(TokenType op) {
         default: return "";
     }
 }
+
+
+template<typename T>
+struct ScopedSymbol {
+
+    unsigned scopeDepth;
+    T value;
+    std::string name;
+    bool isRegister;
+    bool isFunctionParam;
+
+    ScopedSymbol(unsigned scopeDepth, T value, std::string ident, bool isRegister = false,
+                     bool isFunctionParam = false)
+        : scopeDepth(isFunctionParam ? scopeDepth + 1 : scopeDepth), // no shadowing of function parameters in top block
+          value(value),
+          name(ident),
+          isRegister(isRegister),
+          isFunctionParam(isFunctionParam) {}
+};
+
+template<typename T>
+class SymbolTable {
+    std::unordered_map<std::string, std::stack<ScopedSymbol<T>>> symbols;
+    unsigned currentDepth = 0;
+
+   public:
+    std::optional<ScopedSymbol<T>> get(const std::string& name) {
+        auto stack = symbols[name];
+        if (stack.empty()) {
+          return std::nullopt;
+        }
+        
+        return stack.top();
+    }
+
+    bool insert(T value, bool isRegister, bool isFunctionParam) {
+        std::string name;
+
+        // llvm::Value or ScopedIdentifier
+        if constexpr (requires { value.getName().str(); }) {
+            name = value->getName().str();
+        } else {
+            name = value;
+        }
+
+        if (!symbols[name].empty()) {
+            auto scope = symbols[name].top();
+
+            if (!scope.isRegister && scope.scopeDepth >= currentDepth) {
+                return false;
+            }
+        }
+
+        symbols[name].push(ScopedSymbol<T>(currentDepth, value, name, isRegister, isFunctionParam));
+        return true;
+    }
+
+    void enterScope() { currentDepth++; }
+
+    void leaveScope() {
+        for (auto& e : symbols) {
+            if (e.second.empty())
+                continue;
+
+            if (e.second.top().scopeDepth >= currentDepth) {
+                e.second.pop();
+            }
+        }
+
+        currentDepth--;
+    }
+};
 
 struct ASTNode {
     virtual std::string to_string() const = 0;
@@ -240,4 +316,10 @@ class AbstractSyntaxTree {
         }
         return ss.str();
     }
+
+    const std::vector<std::unique_ptr<Function>>& getFunctions() const {
+        return functions;
+    }
 };
+
+} // end namespace clonk

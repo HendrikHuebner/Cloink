@@ -1,12 +1,17 @@
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <fstream>
 #include "ast.hpp"
 #include "debug.hpp"
 #include "diagnostics.hpp"
 #include "lexer.hpp"
+#include "codegen.hpp"
 #include "parser.hpp"
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
 
 void printUsage() {
     std::cerr << "usage: ./clonk (-a|-c) source_file\n"
@@ -27,7 +32,7 @@ int main(int argc, char* argv[]) {
     std::ifstream f(path);
 
     if (!f) {
-        warn("File not found: " + path);
+        logger::warn("File not found: " + path);
         exit(EXIT_FAILURE);
     }
 
@@ -35,24 +40,28 @@ int main(int argc, char* argv[]) {
     ss << f.rdbuf();
     std::string program = ss.str();
 
-    std::cerr << "prog: \"" << program << "\"" << std::endl;
-
-    TokenStream ts(program);
-    Parser parser(ts);
+    clonk::TokenStream ts(program);
+    clonk::Parser parser(ts);
+    clonk::AbstractSyntaxTree ast = parser.parseProgram();
 
     if (option == "-a") {
-        AbstractSyntaxTree ast = parser.parseProgram();
         std::cout << ast.to_string();
         
-    } else if (option == "-c") {
-        AbstractSyntaxTree ast = parser.parseProgram();
+    } else if (option == "-l") {
+        llvm::LLVMContext ctx;
+        std::unique_ptr<llvm::Module> mod = clonk::createModule(ctx, "module123", ast);
+        
+        mod->print(llvm::errs(), nullptr, false, true);
+        
+        assert(!llvm::verifyModule(*mod, &llvm::errs()));
+        logger::log("Valid LLVM module!\n");
 
-    } else {
+    } else if (option != "-c") {
         printUsage();
         return EXIT_FAILURE;
     }
 
-    if (DiagnosticsManager::get().isError()) {
+    if (clonk::DiagnosticsManager::get().isError()) {
         return EXIT_FAILURE;
     }
     
