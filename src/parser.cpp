@@ -209,14 +209,14 @@ std::vector<Identifier> Parser::parseParamlist() {
 
     if (ts.peek().type == TokenType::IdentifierType) {
         Identifier ident = matchIdentifier();
-        scopes.insert(ident.name, false, true);
+        scopes.insert(ident.name, ident.name, false, true);
         params.push_back(ident);
     }
 
     while (ts.peek().type == TokenType::Comma) {
         matchToken(TokenType::Comma, "parameter seperator comma");
         Identifier ident = matchIdentifier();
-        if (!scopes.insert(ident.name, false, true)) {
+        if (!scopes.insert(ident.name, ident.name, false, true)) {
             DiagnosticsManager::get().error(ts, "duplicate function parameter: \"" + ident.name + "\"");
         }
 
@@ -228,10 +228,13 @@ std::vector<Identifier> Parser::parseParamlist() {
 
 std::unique_ptr<Function> Parser::parseFunction() {
     Identifier ident = matchIdentifier();
+    declaredFunctions.insert(ident.name);
+
     matchToken(TokenType::ParenthesisL, "parameter list opening parenthesis");
     std::vector<Identifier> params = parseParamlist();
     matchToken(TokenType::ParenthesisR, "parameter list closing parenthesis");
     std::unique_ptr<Block> block = parseBlock();
+    
     return std::make_unique<Function>(ident, std::move(params), std::move(block));
 }
 
@@ -311,7 +314,7 @@ std::unique_ptr<Statement> Parser::parseDeclStatement() {
         std::unique_ptr<Expression> expr = parseExpression();
         matchToken(TokenType::EndOfStatement, "\";\"");
 
-        if (!scopes.insert(ident.name, type == TokenType::KeyRegister, false)) {
+        if (!scopes.insert(ident.name, ident.name, type == TokenType::KeyRegister, false)) {
             DiagnosticsManager::get().error(ts, "redeclared identifier \"" + ident.name + "\"");
         }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <llvm/ADT/FunctionExtras.h>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -76,15 +77,7 @@ class SymbolTable {
         return stack.top();
     }
 
-    bool insert(T value, bool isRegister, bool isFunctionParam) {
-        std::string name;
-
-        // llvm::Value or ScopedIdentifier
-        if constexpr (requires { value.getName().str(); }) {
-            name = value->getName().str();
-        } else {
-            name = value;
-        }
+    bool insert(std::string name, T value, bool isRegister, bool isFunctionParam) {
 
         if (!symbols[name].empty()) {
             auto scope = symbols[name].top();
@@ -303,12 +296,23 @@ struct Function {
     }
 };
 
+class Parser;
+
 class AbstractSyntaxTree {
     std::vector<std::unique_ptr<Function>> functions;
+    std::vector<std::pair<std::string, int>> externFunctions; // name, paramcount
+
+    friend Parser;
+
+    void addFunction(std::unique_ptr<Function> function) {
+        functions.push_back(std::move(function));
+    }
+
+    void addExternFunction(std::string name, int paramCount) {
+        externFunctions.push_back({ name, paramCount });
+    }
 
   public:
-    AbstractSyntaxTree(std::vector<std::unique_ptr<Function>>& functions) : functions(std::move(functions)) {}
-
     std::string to_string() const {
         std::ostringstream ss;
         for (auto& func : functions) {
@@ -319,6 +323,10 @@ class AbstractSyntaxTree {
 
     const std::vector<std::unique_ptr<Function>>& getFunctions() const {
         return functions;
+    }
+
+    const std::vector<std::pair<std::string, int>>& getExternFunctions() const {
+        return externFunctions;
     }
 };
 

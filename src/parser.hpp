@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "ast.hpp"
 #include "lexer.hpp"
@@ -10,24 +11,33 @@
 namespace clonk {
 
 class Parser {
-    TokenStream& ts;
 
+    TokenStream& ts;
     SymbolTable<std::string> scopes;
 
     // function parameter counts
     std::unordered_map<std::string, size_t> paramCounts;
+    std::unordered_set<std::string> declaredFunctions;
 
    public:
     Parser(TokenStream& ts) : ts(ts) {}
 
     AbstractSyntaxTree parseProgram() {
+        AbstractSyntaxTree ast;
+
         std::vector<std::unique_ptr<Function>> functions;
 
         while (!ts.empty()) {
-            functions.push_back(parseFunction());
+            ast.addFunction(parseFunction());
+        }
+        
+        for (const auto& entry : paramCounts) {
+            if (declaredFunctions.find(entry.first) == declaredFunctions.end()) {
+                ast.addExternFunction(entry.first, entry.second);
+            }
         }
 
-        return AbstractSyntaxTree(functions);
+        return ast;
     }
 
    private:

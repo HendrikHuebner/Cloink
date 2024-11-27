@@ -2,9 +2,7 @@ test.sh
 compile_commands.json
 .vscode
 .cache
-test_ast.sh
-test_ir.sh
-test.txt
+test*
 bc*
 build
 homework

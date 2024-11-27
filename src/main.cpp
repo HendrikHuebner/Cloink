@@ -50,11 +50,10 @@ int main(int argc, char* argv[]) {
     } else if (option == "-l") {
         llvm::LLVMContext ctx;
         std::unique_ptr<llvm::Module> mod = clonk::createModule(ctx, "module123", ast);
-        
-        mod->print(llvm::errs(), nullptr, false, true);
-        
+
+        //mod->print(llvm::errs(), nullptr, false, true);
         assert(!llvm::verifyModule(*mod, &llvm::errs()));
-        logger::log("Valid LLVM module!\n");
+        mod->print(llvm::outs(), nullptr, false, true); 
 
     } else if (option != "-c") {
         printUsage();
