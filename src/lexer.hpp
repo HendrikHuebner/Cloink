@@ -21,14 +21,14 @@ enum TokenType {
     OpDivide,
     OpModulo,
     OpBitNot,
-    OpBitAnd,
-    OpBitOr,
-    OpBitXor,
+    OpAmp,
+    OpOr,
+    OpXor,
     OpShiftLeft,
     OpShiftRight,
     OpNot,
-    OpOr,
-    OpAnd,
+    OpLogicalOr,
+    OpLogicalAnd,
     OpGreaterThan,
     OpLessThan,
     OpGreaterEq,
@@ -57,11 +57,13 @@ enum TokenType {
     EndOfStatement,
 };
 
+std::string opToString(TokenType op);
+
 struct Token {
     TokenType type;
-    std::variant<std::monostate, std::string, uint64_t> data;
+    std::variant<std::monostate, std::string_view, uint64_t> data;
 
-    Token(TokenType type, const std::string& identifier)
+    Token(TokenType type, const std::string_view& identifier)
         : type(type), data(identifier) {
         assert(type == TokenType::IdentifierType);
     }
@@ -86,9 +88,9 @@ struct Token {
 
     ~Token() = default;
 
-    const std::string& getIdentifier() const {
+    const std::string_view& getIdentifier() const {
         assert(type == TokenType::IdentifierType);
-        return std::get<std::string>(data);
+        return std::get<std::string_view>(data);
     }
 
     uint64_t getValue() const {
@@ -100,14 +102,14 @@ struct Token {
 };
 
 class TokenStream {
-    const std::string input;
+    std::string_view input;
     size_t position = 0;
-    size_t line = 0;
+    size_t line = 1;
     size_t lineStart = 0;
     std::optional<Token> top = std::nullopt;
     
    public:
-    explicit TokenStream(const std::string input) : input(input), position(0) {}
+    explicit TokenStream(std::string_view input) : input(input), position(0) {}
 
     [[maybe_unused]] Token next();
 
@@ -115,7 +117,9 @@ class TokenStream {
 
     bool empty();
 
-    std::string getCurrentLine() const { return input.substr(lineStart, position + 1); }
+    std::string_view getCurrentLine() const { 
+        return input.substr(lineStart, std::max(input.size() - 1, position + 1)); 
+    }
 
     size_t getCurrentLineNumber() const { return line; }
 

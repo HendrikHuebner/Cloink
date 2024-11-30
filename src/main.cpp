@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -27,12 +28,12 @@ int main(int argc, char* argv[]) {
     }
 
     const std::string option = argv[1];
-    const std::string path = argv[2];
+    const std::filesystem::path path = argv[2];
 
     std::ifstream f(path);
 
     if (!f) {
-        logger::warn("File not found: " + path);
+        logger::warn("File not found: " + path.string());
         exit(EXIT_FAILURE);
     }
 
@@ -49,10 +50,12 @@ int main(int argc, char* argv[]) {
         
     } else if (option == "-l") {
         llvm::LLVMContext ctx;
-        std::unique_ptr<llvm::Module> mod = clonk::createModule(ctx, "module123", ast);
+        std::unique_ptr<llvm::Module> mod = clonk::createModule(ctx, path.filename(), ast);
 
-        //mod->print(llvm::errs(), nullptr, false, true);
-        assert(!llvm::verifyModule(*mod, &llvm::errs()));
+        if(llvm::verifyModule(*mod, &llvm::errs())) {
+            mod->print(llvm::errs(), nullptr, false, true);
+        }
+
         mod->print(llvm::outs(), nullptr, false, true); 
 
     } else if (option != "-c") {
@@ -61,6 +64,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (clonk::DiagnosticsManager::get().isError()) {
+        clonk::DiagnosticsManager::get().printErrors(std::cerr);
         return EXIT_FAILURE;
     }
     

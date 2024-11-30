@@ -1,7 +1,9 @@
 
+#include <cstddef>
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include "ast.hpp"
 #include "lexer.hpp"
@@ -45,11 +47,11 @@ static int getBinOpPrecedence(TokenType op) {
         case TokenType::OpLessEq: return 9;
         case TokenType::OpEquals:
         case TokenType::OpNotEquals: return 8;
-        case TokenType::OpBitAnd: return 7;
-        case TokenType::OpBitXor: return 6;
-        case TokenType::OpBitOr: return 5;
-        case TokenType::OpAnd: return 4;
-        case TokenType::OpOr: return 3;
+        case TokenType::OpAmp: return 7;
+        case TokenType::OpXor: return 6;
+        case TokenType::OpOr: return 5;
+        case TokenType::OpLogicalAnd: return 4;
+        case TokenType::OpLogicalOr: return 3;
         case TokenType::OpAssign: return 1;
         default: return -1;
     }
@@ -83,39 +85,28 @@ std::unique_ptr<Expression> Parser::parseTerm() {
             matchToken(TokenType::ParenthesisR, "closing parenthesis around expression");
             return expr;
         }
-        case TokenType::OpBitAnd: {
+        case TokenType::OpAmp: {
             ts.next();
             Token token = ts.peek();
             expr = parseValue(true);
             
-            auto scopedIdent = scopes.get(token.getIdentifier());
-            if (scopedIdent->isRegister) {
-                DiagnosticsManager::get().error(ts, "cannot reference register type \"" + token.getIdentifier() + "\"");
+            if (!dynamic_cast<IndexExpr*>(expr.get())) {
+                auto scopedIdent = scopes.get(token.getIdentifier());
+
+                if (scopedIdent->isRegister) {
+                    DiagnosticsManager::get().error(ts, "cannot reference register type \"" + token.getIdentifier() + "\"");
+                } else if (scopedIdent->isFunctionParam) {
+                    DiagnosticsManager::get().error(ts, "cannot reference function parameter \"" + token.getIdentifier() + "\"");
+                }
             }
-            return std::make_unique<UnOp>(std::move(expr), TokenType::OpBitAnd);
+
+            return std::make_unique<UnOp>(std::move(expr), TokenType::OpAmp);
         }
         case TokenType::OpNot: 
         case TokenType::OpMinus: 
         case TokenType::OpBitNot: {
             TokenType op = ts.next().type;
-            TokenType next = ts.peek().type;
-            expr = parseTerm();
-            
-            if (next != TokenType::ParenthesisL) {
-                // check for binop
-                BinOp* binop;
-
-                if ((binop = dynamic_cast<BinOp*>(expr.get()))) {
-                    if (binop->op == TokenType::OpAssign) {
-                        DiagnosticsManager::get().unexpectedToken(ts, binop->op, "cannot assign to rvalue expression");
-                    }
-
-                    return std::make_unique<BinOp>(
-                         std::make_unique<UnOp>(std::move(binop->leftExpr), op),
-                        std::move(binop->rightExpr), binop->op);
-                }
-            }
-            
+            expr = parseTerm();            
             return std::make_unique<UnOp>(std::move(expr), op);
         }
 
@@ -128,7 +119,6 @@ std::unique_ptr<Expression> Parser::parseTerm() {
         }
         default: {
             ts.next();
-            logger::warn("Unexpected Token: \n", next);
             DiagnosticsManager::get().unexpectedToken(ts, ts.peek());
             exit(EXIT_FAILURE);
         }
@@ -141,16 +131,17 @@ std::unique_ptr<Expression> Parser::parseExpression() {
     while (true) {
         Token op = ts.peek();
 
-        // binop
-        if (op.type == TokenType::OpAssign && !dynamic_cast<LValue*>(expr.get())) {
-            DiagnosticsManager::get().unexpectedToken(ts, op, "cannot assign to rvalue expression");
-        }
-
         int precedence = getBinOpPrecedence(op.type);
 
-        if (precedence == -1)
+        if (precedence == -1) {
+            if (op.type == TokenType::OpAssign && !dynamic_cast<LValue*>(expr.get())) {
+                DiagnosticsManager::get().unexpectedToken(ts, op, "cannot assign to rvalue expression");
+            }
+            
             return expr;
+        }
 
+        // expr is a BinOp
         if (precedence < 0) {
             logger::debug("Expected BinOp token: %d %d \n", op.type);
             DiagnosticsManager::get().unexpectedToken(ts, op);
@@ -162,23 +153,30 @@ std::unique_ptr<Expression> Parser::parseExpression() {
         std::unique_ptr<Expression> right = parseTerm();
 
         BinOp* leftBinop;
+
         std::unique_ptr<Expression> result;
 
         if ((leftBinop = dynamic_cast<BinOp*>(expr.get()))) {
-            
-            if (op.type == TokenType::OpAssign) {
-                DiagnosticsManager::get().unexpectedToken(ts, op, "cannot assign to rvalue expression");
-            }
-
             int leftPrecedence = getBinOpPrecedence(leftBinop->op);
 
-            if (precedence > leftPrecedence) {
+            if (precedence > leftPrecedence || (precedence == leftPrecedence && op.type == TokenType::OpAssign)) {
+                if (op.type == TokenType::OpAssign && !dynamic_cast<LValue*>(leftBinop->leftExpr.get())) {
+                    DiagnosticsManager::get().unexpectedToken(ts, op, "cannot assign to rvalue expression");
+                }
+
                 expr = std::make_unique<BinOp>(
                     std::move(leftBinop->leftExpr), 
                     std::make_unique<BinOp>(std::move(leftBinop->rightExpr), std::move(right), op.type),
                     leftBinop->op);
-
                 continue;
+
+            } else if (op.type == TokenType::OpAssign) {
+                DiagnosticsManager::get().unexpectedToken(ts, op, "cannot assign to rvalue expression");
+            }
+            
+        } else {
+            if (op.type == TokenType::OpAssign && !dynamic_cast<LValue*>(expr.get())) {
+                DiagnosticsManager::get().unexpectedToken(ts, op, "cannot assign to rvalue expression");
             }
         }
         
@@ -216,10 +214,12 @@ std::vector<Identifier> Parser::parseParamlist() {
     while (ts.peek().type == TokenType::Comma) {
         matchToken(TokenType::Comma, "parameter seperator comma");
         Identifier ident = matchIdentifier();
-        if (!scopes.insert(ident.name, ident.name, false, true)) {
+        std::string newName = scopes.insert(ident.name, ident.name, false, true);
+        if (newName.empty()) {
             DiagnosticsManager::get().error(ts, "duplicate function parameter: \"" + ident.name + "\"");
         }
 
+        ident.name = newName;
         params.push_back(ident);
     }
 
@@ -235,7 +235,23 @@ std::unique_ptr<Function> Parser::parseFunction() {
     matchToken(TokenType::ParenthesisR, "parameter list closing parenthesis");
     std::unique_ptr<Block> block = parseBlock();
     
-    return std::make_unique<Function>(ident, std::move(params), std::move(block));
+    auto retval = std::make_unique<Function>(ident, std::move(params), std::move(block));
+    retval->autoDecls = scopes.collectAutoDecls();
+
+    checkFunctionParamCounts(ident.name, params.size());
+    return retval;
+}
+
+void Parser::checkFunctionParamCounts(const std::string& name, size_t paramCount) {
+    if (paramCounts.find(name) == paramCounts.end()) {
+        paramCounts[name] = paramCount;
+
+    } else if (paramCounts[name] != paramCount) {
+            DiagnosticsManager::get().error(ts, "function \"" + name 
+            + "\" called with missmatching number of parameters: " 
+            + std::to_string(paramCount) + " previously called with " 
+            + std::to_string(paramCounts[name]) + " parameters");
+    }
 }
 
 std::unique_ptr<Expression> Parser::parseValue(bool lvalue) {
@@ -245,16 +261,7 @@ std::unique_ptr<Expression> Parser::parseValue(bool lvalue) {
 
     if (type == TokenType::ParenthesisL) {
         auto params = parseFunctionCallParamList();
-
-        if (paramCounts.find(ident.name) == paramCounts.end()) {
-            paramCounts[ident.name] = params.size();
-
-        } else if (paramCounts[ident.name] != params.size()) {
-            DiagnosticsManager::get().error(ts, "function \"" + ident.name 
-            + "\" called with missmatching number of parameters: " 
-            + std::to_string(params.size()) + " previously called with " 
-            + std::to_string(paramCounts[ident.name]) + " parameters");
-        }
+        checkFunctionParamCounts(ident.name, params.size());
 
         value = new FunctionCall(ident, std::move(params));
 
@@ -314,10 +321,12 @@ std::unique_ptr<Statement> Parser::parseDeclStatement() {
         std::unique_ptr<Expression> expr = parseExpression();
         matchToken(TokenType::EndOfStatement, "\";\"");
 
-        if (!scopes.insert(ident.name, ident.name, type == TokenType::KeyRegister, false)) {
+        std::string newName = scopes.insert(ident.name, ident.name, type == TokenType::KeyRegister, false);
+        if (newName.empty()) {
             DiagnosticsManager::get().error(ts, "redeclared identifier \"" + ident.name + "\"");
         }
 
+        ident.name = newName;
         return std::make_unique<Declaration>( 
             type == TokenType::KeyAuto,
             type == TokenType::KeyRegister, ident, std::move(expr));

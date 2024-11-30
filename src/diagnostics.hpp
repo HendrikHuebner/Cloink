@@ -11,13 +11,13 @@ namespace clonk {
 
 class DiagnosticError {
 
-    const std::string& line;
+    const std::string_view line;
     const int lineNum;
     const int linePosition;
     const std::string message;
 
   public:
-    DiagnosticError(const std::string& line, int lineNum, int linePosition, const std::string message = "") :
+    DiagnosticError(std::string_view line, int lineNum, int linePosition, const std::string& message = "") :
         line(line), lineNum(lineNum), linePosition(linePosition), message(message) {}
     
   friend std::ostream& operator<<(std::ostream& os, const DiagnosticError& err);
@@ -34,48 +34,59 @@ inline std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
 }
 
 class DiagnosticsManager {
+    std::vector<DiagnosticError> errors;
     bool _isError = false;
 
     public:
-
-    static DiagnosticsManager get() {
+    static DiagnosticsManager& get() {
         static DiagnosticsManager instance;
         return instance;
     }
     
-    void unknownToken(const TokenStream& ts) const {
-        std::string line = ts.getCurrentLine();
+    void unknownToken(const TokenStream& ts) {
+        std::string_view line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
 
-        DiagnosticError error(line, lineNum, linePosition, "Unknown Token");
-        std::cerr << error << std::endl;
-
+        errors.emplace_back(line, lineNum, linePosition, "Unknown token");
+        printErrors(std::cerr);
         exit(EXIT_FAILURE);
     }
 
     void unexpectedToken(const TokenStream& ts, const Token& token, const std::string& expected = "") {
-        std::string line = ts.getCurrentLine();
+        std::string_view line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
+
+        std::string message;
         
-        DiagnosticError error(line, lineNum, linePosition, "Unexpected Token \"" + token.to_string() + "\"" + 
-            (expected.empty() ? "" : ", expected " + expected + "."));
-            
-        std::cerr << error << std::endl;
+        if (token.type == TokenType::EndOfFile) {
+            message = "Unexpected end of file";
+        } else {
+            message = "Unexpected Token \"" + token.to_string() + "\"";
+        }
+
+        if (!expected.empty())
+            message += ", expected \"" + expected + "\"";
+
+        errors.emplace_back(line, lineNum, linePosition, message);
         _isError = true;
     }
 
-    void error(const TokenStream& ts, const std::string& msg = "") {
-        std::string line = ts.getCurrentLine();
+    void error(const TokenStream& ts, const std::string& message = "") {
+        std::string_view line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
         
-        DiagnosticError error(line, lineNum, linePosition, msg + ".");
-            
-        std::cerr << error << std::endl;
+        errors.emplace_back(line, lineNum, linePosition, message);
         _isError = true;
-    } 
+    }
+
+    void printErrors(std::ostream& os) {
+        for (auto& err : errors) {
+            os << err;
+        }
+    }
     
     bool isError() {
         return _isError;

@@ -1,4 +1,5 @@
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <optional>
 #include <stdexcept>
@@ -10,32 +11,38 @@
 
 using namespace clonk;
 
-std::string Token::to_string() const {
-    switch(this->type) {
-        case IdentifierType: return this->getIdentifier();
-        case NumberLiteral: return std::to_string(this->getValue());
-        case EndOfFile: return "EOF";
+std::string clonk::opToString(TokenType op) {
+    switch (op) {
         case OpPlus: return "+";
         case OpMinus: return "-";
-        case OpMultiply: return "*";
         case OpDivide: return "/";
         case OpModulo: return "%";
+        case OpMultiply: return "*";
         case OpBitNot: return "~";
-        case OpBitAnd: return "&";
-        case OpBitOr: return "|";
-        case OpBitXor: return "^";
-        case OpShiftLeft: return ">>";
-        case OpShiftRight: return "<<";
-        case OpNot: return "!";
-        case OpOr: return "||";
-        case OpAnd: return "&&";
-        case OpGreaterThan: return ">";
-        case OpLessThan: return "<";
+        case OpOr: return "|";
+        case OpXor: return "^";
+        case OpAmp: return "&";
+        case OpLogicalAnd: return "&&";
+        case OpEquals: return "==";
         case OpGreaterEq: return ">=";
         case OpLessEq: return "<=";
-        case OpEquals: return "==";
+        case OpNot: return "!";
+        case OpGreaterThan: return ">";
         case OpNotEquals: return "!=";
+        case OpLogicalOr: return "||";
+        case OpLessThan: return "<";
+        case OpShiftLeft: return "<<";
         case OpAssign: return "=";
+        case OpShiftRight: return ">>";
+        default: return "";
+    }
+}
+
+std::string Token::to_string() const {
+    switch(this->type) {
+        case IdentifierType: return std::string(this->getIdentifier());
+        case NumberLiteral: return std::to_string(this->getValue());
+        case EndOfFile: return "EOF";
         case KeyAuto: return "auto";
         case KeyRegister: return "register";
         case KeyIf: return "if";
@@ -51,30 +58,40 @@ std::string Token::to_string() const {
         case SizeSpec: return "@";
         case Comma: return ",";
         case EndOfStatement: return ";";
+        default: opToString(this->type);
     }
 
     return "";
 } 
 
-static const std::unordered_map<std::string, TokenType> keywords = {
+const std::unordered_map<std::string_view, TokenType> keywords = {
     {"auto", TokenType::KeyAuto}, {"return", TokenType::KeyReturn},
     {"register", TokenType::KeyRegister}, {"if", TokenType::KeyIf},
-    {"else", TokenType::KeyElse},         {"while", TokenType::KeyWhile},
-    
+    {"else", TokenType::KeyElse},         {"while", TokenType::KeyWhile},  
 };
 
-static inline bool isBaseChar(char c) {
+enum CharType {
+    X, // None
+    A, // Alphabetical char or underscore
+    O, // Operator
+    P, // Punctuation char
+    N  // Numeric char
+};
+
+const CharType lut[128] = {
+    X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X,
+    X, O, X, X, X, O, O, X, P, P, O, O, P, O, P, O, N, N, N, N, N, N, N, N, N, N, X, P, O, O, O, X,
+    P, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, P, X, P, O, A,
+    X, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, P, O, P, O, X,
+};
+
+inline CharType lookupChar(unsigned char c) {
+    if (c >= 128) return X;
+    return lut[c];
+}
+
+inline bool isBaseChar(char c) {
     return std::isalnum(c) || c == '_';
-}
-
-static inline bool isOperator(char c) {
-    return c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '%' || c == '!' ||
-           c == '^' || c == '~' || c == '&' || c == '|' || c == '<' || c == '>';
-}
-
-static inline bool isPunctuationChar(char c) {
-    return c == ';' || c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']' ||
-           c == '@' || c == ',';
 }
 
 Token TokenStream::next() {
@@ -89,23 +106,21 @@ Token TokenStream::next() {
         return Token(TokenType::EndOfFile);
     }
 
-    if (std::isalpha(c) || c == '_') {
-        return lexWord();
-
-    } else if (std::isdigit(c)) {
-        return lexNumber();
-
-    } else if (isOperator(c)) {
-        return lexOperator();
-
-    } else if (isPunctuationChar(c)) {
-        return lexPunctuationChar();
-
-    } else {
-        position++;
-        
-        DiagnosticsManager::get().unknownToken(*this);
-        exit(EXIT_FAILURE);
+    CharType charType = lookupChar(c);
+    switch (charType) {
+        case CharType::A:
+            return lexWord();
+        case CharType::N:
+            return lexNumber();
+        case CharType::O:
+            return lexOperator();
+        case CharType::P:
+            return lexPunctuationChar();
+        default: {
+            position++;
+            DiagnosticsManager::get().unknownToken(*this);
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -133,6 +148,10 @@ char TokenStream::moveToNextToken() {
                 // skip comment
                 while (position < input.size() && input[position] != '\n') {
                     position++;
+                }
+
+                if (position >= input.size()) {
+                    return 0;
                 }
 
                 position++;
@@ -183,7 +202,7 @@ Token TokenStream::lexOperator() {
             op = TokenType::OpModulo;
             break;
         case '^':
-            op = TokenType::OpBitXor;
+            op = TokenType::OpXor;
             break;
         case '~':
             op = TokenType::OpBitNot;
@@ -232,19 +251,19 @@ Token TokenStream::lexOperator() {
         }
         case '&': {
             if (c2 == '&') {
-                op = TokenType::OpAnd;
+                op = TokenType::OpLogicalAnd;
                 position++;
             } else {
-                op = TokenType::OpBitAnd;
+                op = TokenType::OpAmp;
             }
             break;
         }
         case '|': {
             if (c2 == '|') {
-                op = TokenType::OpOr;
+                op = TokenType::OpLogicalOr;
                 position++;
             } else {
-                op = TokenType::OpBitOr;
+                op = TokenType::OpOr;
             }
             break;
         }
@@ -268,7 +287,7 @@ Token TokenStream::lexWord() {
         position++;
     }
 
-    std::string lexeme = input.substr(start, position - start);
+    std::string_view lexeme = input.substr(start, position - start);
 
     if (keywords.find(lexeme) != keywords.end()) {
         return {keywords.at(lexeme)};
@@ -279,11 +298,15 @@ Token TokenStream::lexWord() {
 
 Token TokenStream::lexNumber() {
     size_t start = position;
+
     while (position < input.size() && std::isdigit(input[position])) {
         position++;
     }
 
-    return {TokenType::NumberLiteral, (uint64_t)std::atoll(input.substr(start, position).c_str())};
+    return Token(
+        TokenType::NumberLiteral, 
+        static_cast<uint64_t>(atoll(input.substr(start, position).cbegin()))
+    );
 }
 
 Token TokenStream::lexPunctuationChar() {

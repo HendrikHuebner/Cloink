@@ -16,44 +16,15 @@
 
 namespace clonk {
 
-inline std::string opToString(TokenType op) {
-    switch (op) {
-        case OpPlus: return "+";
-        case OpMinus: return "-";
-        case OpDivide: return "/";
-        case OpModulo: return "%";
-        case OpMultiply: return "*";
-        case OpBitNot: return "~";
-        case OpBitOr: return "|";
-        case OpBitXor: return "^";
-        case OpBitAnd: return "&";
-        case OpAnd: return "&&";
-        case OpEquals: return "==";
-        case OpGreaterEq: return ">=";
-        case OpLessEq: return "<=";
-        case OpNot: return "!";
-        case OpGreaterThan: return ">";
-        case OpNotEquals: return "!=";
-        case OpOr: return "||";
-        case OpLessThan: return "<";
-        case OpShiftLeft: return "<<";
-        case OpAssign: return "=";
-        case OpShiftRight: return ">>";
-        default: return "";
-    }
-}
-
-
 template<typename T>
 struct ScopedSymbol {
-
     unsigned scopeDepth;
     T value;
-    std::string name;
+    std::string_view name;
     bool isRegister;
     bool isFunctionParam;
 
-    ScopedSymbol(unsigned scopeDepth, T value, std::string ident, bool isRegister = false,
+    ScopedSymbol(unsigned scopeDepth, T value, std::string_view ident, bool isRegister = false,
                      bool isFunctionParam = false)
         : scopeDepth(isFunctionParam ? scopeDepth + 1 : scopeDepth), // no shadowing of function parameters in top block
           value(value),
@@ -64,11 +35,12 @@ struct ScopedSymbol {
 
 template<typename T>
 class SymbolTable {
-    std::unordered_map<std::string, std::stack<ScopedSymbol<T>>> symbols;
+    std::unordered_map<std::string_view, std::stack<ScopedSymbol<T>>> symbols;
+    std::vector<std::string_view> autoDecls;
     unsigned currentDepth = 0;
 
    public:
-    std::optional<ScopedSymbol<T>> get(const std::string& name) {
+    std::optional<ScopedSymbol<T>> get(std::string_view name) {
         auto stack = symbols[name];
         if (stack.empty()) {
           return std::nullopt;
@@ -77,18 +49,25 @@ class SymbolTable {
         return stack.top();
     }
 
-    bool insert(std::string name, T value, bool isRegister, bool isFunctionParam) {
+    std::string insert(std::string_view name, T value, bool isRegister, bool isFunctionParam) {
+        auto& stack = symbols[name];
 
-        if (!symbols[name].empty()) {
-            auto scope = symbols[name].top();
+        if (!stack.empty()) {
+            auto scope = stack.top();
 
             if (!scope.isRegister && scope.scopeDepth >= currentDepth) {
-                return false;
+                return "";
             }
+        } else {
+            return + "." + stack.size(); // shadow
         }
-
+        
+        // TODO: SSA construction
+        if (/* !isRegister && */!isFunctionParam)
+            autoDecls.push_back(name);
+        
         symbols[name].push(ScopedSymbol<T>(currentDepth, value, name, isRegister, isFunctionParam));
-        return true;
+        return std::string(name);
     }
 
     void enterScope() { currentDepth++; }
@@ -105,6 +84,12 @@ class SymbolTable {
 
         currentDepth--;
     }
+
+    std::vector<std::string> collectAutoDecls() {
+        auto retval = autoDecls;
+        autoDecls.clear();
+        return retval;
+    }
 };
 
 struct ASTNode {
@@ -116,13 +101,20 @@ struct Expression : public ASTNode {};
 
 struct LValue : public Expression {};
 
-struct Identifier : LValue {
-    std::string name;
+static unsigned idIndex = 1;
 
-    Identifier(const std::string& name) : name(name) {}
+struct Identifier : LValue {
+    const std::string name;
+    const unsigned id;
+
+    Identifier(const std::string& name) : name(name), id(idIndex++) {}
 
     std::string to_string() const override {
         return name;
+    }
+
+    bool operator==(const Identifier& other)  {
+        return other.id == this->id;
     }
 };
 
@@ -188,7 +180,7 @@ struct IndexExpr : LValue {
         : array(std::move(array)), idx(std::move(idx)), sizeSpec(sizeSpec) {}
 
     std::string to_string() const override {
-        return "(IndexExpr " + array->to_string() + " [" + idx->to_string() + "@" + std::to_string(sizeSpec) + "] )";
+        return "([] " + array->to_string() + " " + idx->to_string() + "@" + std::to_string(sizeSpec) + ")";
     }
 };
 
@@ -258,7 +250,7 @@ struct ReturnStatement : Statement {
     ReturnStatement(std::unique_ptr<Expression> expr) : expr(std::move(expr)) {}
 
     std::string to_string() const override {
-        return "(Return " + (expr ? expr.value()->to_string() : "()") + ")\n";
+        return "(return " + (expr ? expr.value()->to_string() : "()") + ")\n";
     }
 };
 
@@ -281,6 +273,7 @@ struct Function {
     Identifier ident;
     std::vector<Identifier> params;
     std::unique_ptr<Block> block;
+    std::vector<std::string> autoDecls;
 
     Function(const Identifier& ident, const std::vector<Identifier>& params, std::unique_ptr<Block> block)
         : ident(ident), params(params), block(std::move(block)) {}
@@ -331,3 +324,10 @@ class AbstractSyntaxTree {
 };
 
 } // end namespace clonk
+
+template<>
+struct std::hash<clonk::Identifier>{
+    std::size_t operator()(const clonk::Identifier& ident) const noexcept {
+        return ident.id;
+    }
+};

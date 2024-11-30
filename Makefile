@@ -14,7 +14,7 @@ LLVM_CPPFLAGS := $(shell $(LLVM_CONFIG) --cppflags)
 LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
 LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs)
 
-TARGET = bc1
+TARGET = clonk
 
 all: $(TARGET)
 

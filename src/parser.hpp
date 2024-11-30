@@ -45,6 +45,8 @@ class Parser {
 
     void matchToken(TokenType type, const std::string& expected = "");
 
+    void checkFunctionParamCounts(const std::string& name, size_t paramCount);
+
     Identifier matchIdentifier();
 
     std::unique_ptr<Expression> parseExpression();
