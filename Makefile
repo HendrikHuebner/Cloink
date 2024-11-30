@@ -5,7 +5,7 @@ SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 HDRS = $(wildcard $(SRC_DIR)/*.hpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
 
-CXX = g++
+CXX = clang++
 CXXFLAGS = -Wall -Wextra -Wno-unused-parameter -fsanitize=undefined -std=c++20 -O3
 DEBUGFLAGS = -g3 -O0 -fsanitize=undefined
 
