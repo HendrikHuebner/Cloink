@@ -16,11 +16,12 @@ class DiagnosticError {
     const int linePosition;
     const std::string message;
 
-  public:
-    DiagnosticError(std::string_view line, int lineNum, int linePosition, const std::string& message = "") :
-        line(line), lineNum(lineNum), linePosition(linePosition), message(message) {}
-    
-  friend std::ostream& operator<<(std::ostream& os, const DiagnosticError& err);
+   public:
+    DiagnosticError(std::string_view line, int lineNum, int linePosition,
+                    const std::string& message = "")
+        : line(line), lineNum(lineNum), linePosition(linePosition), message(message) {}
+
+    friend std::ostream& operator<<(std::ostream& os, const DiagnosticError& err);
 };
 
 inline std::ostream& operator<<(std::ostream& os, const DiagnosticError& err) {
@@ -37,12 +38,12 @@ class DiagnosticsManager {
     std::vector<DiagnosticError> errors;
     bool _isError = false;
 
-    public:
+   public:
     static DiagnosticsManager& get() {
         static DiagnosticsManager instance;
         return instance;
     }
-    
+
     void unknownToken(const TokenStream& ts) {
         std::string_view line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
@@ -53,13 +54,14 @@ class DiagnosticsManager {
         exit(EXIT_FAILURE);
     }
 
-    void unexpectedToken(const TokenStream& ts, const Token& token, const std::string& expected = "") {
+    void unexpectedToken(const TokenStream& ts, const Token& token,
+                         const std::string& expected = "") {
         std::string_view line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
 
         std::string message;
-        
+
         if (token.type == TokenType::EndOfFile) {
             message = "Unexpected end of file";
         } else {
@@ -77,7 +79,7 @@ class DiagnosticsManager {
         std::string_view line = ts.getCurrentLine();
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
-        
+
         errors.emplace_back(line, lineNum, linePosition, message);
         _isError = true;
     }
@@ -87,10 +89,8 @@ class DiagnosticsManager {
             os << err;
         }
     }
-    
-    bool isError() {
-        return _isError;
-    }
+
+    bool isError() { return _isError; }
 };
 
-} // end namespace clonk
+}  // end namespace clonk

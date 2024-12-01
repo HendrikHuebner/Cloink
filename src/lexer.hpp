@@ -3,8 +3,8 @@
 #include <cassert>
 #include <cctype>
 #include <cstdint>
-#include <string>
 #include <optional>
+#include <string>
 #include <variant>
 
 namespace clonk {
@@ -63,18 +63,15 @@ struct Token {
     TokenType type;
     std::variant<std::monostate, std::string_view, uint64_t> data;
 
-    Token(TokenType type, const std::string_view& identifier)
-        : type(type), data(identifier) {
+    Token(TokenType type, const std::string_view& identifier) : type(type), data(identifier) {
         assert(type == TokenType::IdentifierType);
     }
 
-    Token(TokenType type, uint64_t value)
-        : type(type), data(value) {
+    Token(TokenType type, uint64_t value) : type(type), data(value) {
         assert(type == TokenType::NumberLiteral);
     }
 
-    Token(TokenType type)
-        : type(type), data(std::monostate()) {}
+    Token(TokenType type) : type(type), data(std::monostate()) {}
 
     Token(const Token& other) : type(other.type), data(other.data) {}
 
@@ -107,7 +104,7 @@ class TokenStream {
     size_t line = 1;
     size_t lineStart = 0;
     std::optional<Token> top = std::nullopt;
-    
+
    public:
     explicit TokenStream(std::string_view input) : input(input), position(0) {}
 
@@ -117,8 +114,8 @@ class TokenStream {
 
     bool empty();
 
-    std::string_view getCurrentLine() const { 
-        return input.substr(lineStart, std::max(input.size() - 1, position + 1)); 
+    std::string_view getCurrentLine() const {
+        return input.substr(lineStart, std::max(input.size() - 1, position + 1));
     }
 
     size_t getCurrentLineNumber() const { return line; }
@@ -134,4 +131,4 @@ class TokenStream {
     Token lexPunctuationChar();
 };
 
-} // end namespace clonk
+}  // end namespace clonk

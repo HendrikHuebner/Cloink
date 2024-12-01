@@ -30,7 +30,7 @@ class Parser {
         while (!ts.empty()) {
             ast.addFunction(parseFunction());
         }
-        
+
         for (const auto& entry : paramCounts) {
             if (declaredFunctions.find(entry.first) == declaredFunctions.end()) {
                 ast.addExternFunction(entry.first, entry.second);
@@ -47,7 +47,7 @@ class Parser {
 
     void checkFunctionParamCounts(const std::string& name, size_t paramCount);
 
-    Identifier matchIdentifier();
+    std::unique_ptr<Identifier> parseIdentifier();
 
     std::unique_ptr<Expression> parseExpression();
 
@@ -57,7 +57,7 @@ class Parser {
 
     std::unique_ptr<Expression> parseValue(bool lvalue = false);
 
-    std::vector<Identifier> parseParamlist();
+    std::vector<std::unique_ptr<Identifier>> parseParamlist();
 
     std::vector<std::unique_ptr<Expression>> parseFunctionCallParamList();
 
@@ -68,4 +68,4 @@ class Parser {
     std::unique_ptr<Statement> parseStatement();
 };
 
-} // end namespace clonk
+}  // end namespace clonk

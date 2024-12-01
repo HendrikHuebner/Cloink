@@ -6,8 +6,8 @@
 #include <string>
 #include <unordered_map>
 
-#include "lexer.hpp"
 #include "diagnostics.hpp"
+#include "lexer.hpp"
 
 using namespace clonk;
 
@@ -39,7 +39,7 @@ std::string clonk::opToString(TokenType op) {
 }
 
 std::string Token::to_string() const {
-    switch(this->type) {
+    switch (this->type) {
         case IdentifierType: return std::string(this->getIdentifier());
         case NumberLiteral: return std::to_string(this->getValue());
         case EndOfFile: return "EOF";
@@ -62,20 +62,20 @@ std::string Token::to_string() const {
     }
 
     return "";
-} 
+}
 
 const std::unordered_map<std::string_view, TokenType> keywords = {
-    {"auto", TokenType::KeyAuto}, {"return", TokenType::KeyReturn},
+    {"auto", TokenType::KeyAuto},         {"return", TokenType::KeyReturn},
     {"register", TokenType::KeyRegister}, {"if", TokenType::KeyIf},
-    {"else", TokenType::KeyElse},         {"while", TokenType::KeyWhile},  
+    {"else", TokenType::KeyElse},         {"while", TokenType::KeyWhile},
 };
 
 enum CharType {
-    X, // None
-    A, // Alphabetical char or underscore
-    O, // Operator
-    P, // Punctuation char
-    N  // Numeric char
+    X,  // None
+    A,  // Alphabetical char or underscore
+    O,  // Operator
+    P,  // Punctuation char
+    N   // Numeric char
 };
 
 const CharType lut[128] = {
@@ -86,7 +86,8 @@ const CharType lut[128] = {
 };
 
 inline CharType lookupChar(unsigned char c) {
-    if (c >= 128) return X;
+    if (c >= 128)
+        return X;
     return lut[c];
 }
 
@@ -108,14 +109,10 @@ Token TokenStream::next() {
 
     CharType charType = lookupChar(c);
     switch (charType) {
-        case CharType::A:
-            return lexWord();
-        case CharType::N:
-            return lexNumber();
-        case CharType::O:
-            return lexOperator();
-        case CharType::P:
-            return lexPunctuationChar();
+        case CharType::A: return lexWord();
+        case CharType::N: return lexNumber();
+        case CharType::O: return lexOperator();
+        case CharType::P: return lexPunctuationChar();
         default: {
             position++;
             DiagnosticsManager::get().unknownToken(*this);
@@ -186,27 +183,13 @@ Token TokenStream::lexOperator() {
     std::optional<TokenType> op = std::nullopt;
 
     switch (c) {
-        case '+':
-            op = TokenType::OpPlus;
-            break;
-        case '-':
-            op = TokenType::OpMinus;
-            break;
-        case '*':
-            op = TokenType::OpMultiply;
-            break;
-        case '/':
-            op = TokenType::OpDivide;
-            break;
-        case '%':
-            op = TokenType::OpModulo;
-            break;
-        case '^':
-            op = TokenType::OpXor;
-            break;
-        case '~':
-            op = TokenType::OpBitNot;
-            break;
+        case '+': op = TokenType::OpPlus; break;
+        case '-': op = TokenType::OpMinus; break;
+        case '*': op = TokenType::OpMultiply; break;
+        case '/': op = TokenType::OpDivide; break;
+        case '%': op = TokenType::OpModulo; break;
+        case '^': op = TokenType::OpXor; break;
+        case '~': op = TokenType::OpBitNot; break;
         case '=': {
             if (c2 == '=') {
                 op = TokenType::OpEquals;
@@ -303,33 +286,21 @@ Token TokenStream::lexNumber() {
         position++;
     }
 
-    return Token(
-        TokenType::NumberLiteral, 
-        static_cast<uint64_t>(atoll(input.substr(start, position).cbegin()))
-    );
+    return Token(TokenType::NumberLiteral,
+                 static_cast<uint64_t>(atoll(input.substr(start, position).cbegin())));
 }
 
 Token TokenStream::lexPunctuationChar() {
     switch (input[position++]) {
-        case ';':
-            return TokenType::EndOfStatement;
-        case '(':
-            return TokenType::ParenthesisL;
-        case ')':
-            return TokenType::ParenthesisR;
-        case '[':
-            return TokenType::BracketL;
-        case ']':
-            return TokenType::BracketR;
-        case '{':
-            return TokenType::BraceL;
-        case '}':
-            return TokenType::BraceR;
-        case '@':
-            return TokenType::SizeSpec;
-        case ',':
-            return TokenType::Comma;
-        default:
-            throw std::runtime_error("Invalid punctuation character!");
+        case ';': return TokenType::EndOfStatement;
+        case '(': return TokenType::ParenthesisL;
+        case ')': return TokenType::ParenthesisR;
+        case '[': return TokenType::BracketL;
+        case ']': return TokenType::BracketR;
+        case '{': return TokenType::BraceL;
+        case '}': return TokenType::BraceR;
+        case '@': return TokenType::SizeSpec;
+        case ',': return TokenType::Comma;
+        default: throw std::runtime_error("Invalid punctuation character!");
     }
 }
