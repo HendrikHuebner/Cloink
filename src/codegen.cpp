@@ -177,7 +177,10 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
             llvm::Value* value = builder.CreateICmpSLE(left, right);
             return allowBoolResult ? value : builder.CreateSExt(value, builder.getInt64Ty());
         }
+        case clonk::OpLogicalOr:
         case clonk::OpLogicalAnd: {
+            bool isOr = binOp->op == clonk::OpLogicalOr;
+
             llvm::BasicBlock* entryBB = builder.GetInsertBlock();
             llvm::BasicBlock* rhsBB =
                 llvm::BasicBlock::Create(context, "rhs", builder.GetInsertBlock()->getParent());
@@ -188,43 +191,10 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
             blockMappings[endBB].sealed = false;
 
             llvm::Value* leftFalse = builder.CreateIsNull(left);
-            builder.CreateCondBr(leftFalse, endBB, rhsBB);
-
-            builder.SetInsertPoint(rhsBB);
-            right = visitExpression(binOp->rightExpr.get());
-            if (right && right->getType()->isPointerTy()) {
-                right = builder.CreateLoad(ty, right, right->getName() + ".val");
-            }
-
-            llvm::Value* rightVal = builder.CreateIsNull(right);
-            llvm::Value* result =
-                builder.CreateSelect(rightVal, builder.getInt64(0), builder.getInt64(1));
-            builder.CreateBr(endBB);
-            builder.SetInsertPoint(endBB);
-
-            blockMappings[endBB].sealed = true;
-            for (auto& entry : blockMappings[endBB].incompletePhis) {
-                addPHIOperands(entry.first, entry.second, endBB);
-            }
-            
-            llvm::PHINode* phiNode = builder.CreatePHI(llvm::Type::getInt64Ty(context), 2);
-            phiNode->addIncoming(result, rhsBB);
-            phiNode->addIncoming(builder.getInt64(0), entryBB);
-            return phiNode;
-        }
-
-        case clonk::OpLogicalOr: {
-            llvm::BasicBlock* entryBB = builder.GetInsertBlock();
-            llvm::BasicBlock* rhsBB =
-                llvm::BasicBlock::Create(context, "rhs", builder.GetInsertBlock()->getParent());
-            llvm::BasicBlock* endBB =
-                llvm::BasicBlock::Create(context, "end", builder.GetInsertBlock()->getParent());
-            
-            blockMappings[rhsBB].sealed = true;
-            blockMappings[endBB].sealed = false;
-
-            llvm::Value* leftTrue = builder.CreateIsNull(left);
-            builder.CreateCondBr(leftTrue, rhsBB, endBB);
+            if (isOr)
+                builder.CreateCondBr(leftFalse, rhsBB, endBB);
+            else 
+                builder.CreateCondBr(leftFalse, endBB, rhsBB);
 
             builder.SetInsertPoint(rhsBB);
             right = visitExpression(binOp->rightExpr.get());
@@ -236,20 +206,20 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
             llvm::Value* result =
                 builder.CreateSelect(rightVal, builder.getInt64(0), builder.getInt64(1));
             
+            builder.CreateBr(endBB);
+            builder.SetInsertPoint(endBB);
+
             blockMappings[endBB].sealed = true;
             for (auto& entry : blockMappings[endBB].incompletePhis) {
                 addPHIOperands(entry.first, entry.second, endBB);
             }
 
-            builder.CreateBr(endBB);
-            builder.SetInsertPoint(endBB);
-
             llvm::PHINode* phiNode = builder.CreatePHI(llvm::Type::getInt64Ty(context), 2);
             phiNode->addIncoming(result, rhsBB);
-            phiNode->addIncoming(builder.getInt64(1), entryBB);
+            phiNode->addIncoming(builder.getInt64(isOr ? 1 : 0), entryBB);
             return phiNode;
         }
-
+        
         default: return nullptr;
     }
 }
