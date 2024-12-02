@@ -2,12 +2,15 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/raw_os_ostream.h>
 #include <chrono>
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <ostream>
 #include <string>
 #include "ast.hpp"
 #include "codegen.hpp"
@@ -25,20 +28,26 @@ void printUsage() {
               << "    -c: syntax/semantic check only (build AST nonetheless). No output other than "
                  "the exit code.\n"
               << "    -l: generate LLVM IR and print it.\n"
-              << "    -b: benchmark parsing and codegen time.\n";
+              << "    -o: output file path.\n"
+              << "    -b: benchmark\n";
 }
 
-Mode parseOption(int argc, char* argv[], bool& benchmark, std::filesystem::path& path) {
+Mode parseOption(int argc, char* argv[], bool& benchmark, std::filesystem::path& path, std::filesystem::path& outputPath) {
     int opt;
     benchmark = false;
     Mode mode = Mode::NONE;
 
-    while ((opt = getopt(argc, argv, "aclb")) != -1) {
+    while ((opt = getopt(argc, argv, "aclbo:")) != -1) {
         switch (opt) {
             case 'a': mode = Mode::AST; break;
             case 'c': mode = Mode::CHECK; break;
             case 'l': mode = Mode::CODEGEN; break;
             case 'b': benchmark = true; break;
+            case 'o': outputPath = std::filesystem::path(optarg); break;
+            case '?': 
+                if (optopt == 'o')
+                    std::cerr << "Option -o requires an argument!" << std::endl;
+            
             default: return Mode::NONE;
         }
     }
@@ -66,8 +75,23 @@ std::string readProgram(std::filesystem::path& path) {
 int main(int argc, char* argv[]) {
     bool benchmark = false;
     std::filesystem::path path;
+    std::filesystem::path outputPath;
 
-    Mode mode = parseOption(argc, argv, benchmark, path);
+    Mode mode = parseOption(argc, argv, benchmark, path, outputPath);
+
+    std::ostream* outputStream = &std::cout;
+    std::ofstream file;
+
+    if (!outputPath.empty()) {
+        file = std::ofstream(outputPath);
+        if (!file) {
+            logger::warn("Output file not found: " + path.string());
+            exit(EXIT_FAILURE);
+        }
+
+        outputStream = &file;
+    }
+
     clonk::AbstractSyntaxTree ast;
     std::chrono::steady_clock::time_point start, end;
 
@@ -94,7 +118,7 @@ int main(int argc, char* argv[]) {
     }
 
     switch (mode) {
-        case Mode::AST: std::cout << ast.to_string(); break;
+        case Mode::AST: *outputStream << ast.to_string() << std::endl; break;
         case Mode::CHECK: break;
         case Mode::CODEGEN: {
             llvm::LLVMContext ctx;
@@ -108,10 +132,13 @@ int main(int argc, char* argv[]) {
 
             if (llvm::verifyModule(*mod, &llvm::errs())) {
                 mod->print(llvm::errs(), nullptr, false, true);
+                assert(false && "Invalid Module!");
             }
 
-            mod->print(llvm::outs(), nullptr, false, true);
-        } break;
+            llvm::raw_os_ostream os(*outputStream);
+            mod->print(os, nullptr, false, true);
+            break;
+        }
         default: printUsage(); return EXIT_FAILURE;
     }
 

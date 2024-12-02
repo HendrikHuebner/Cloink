@@ -18,7 +18,8 @@ class Parser {
     // function parameter counts
     std::unordered_map<std::string, size_t> paramCounts;
     std::unordered_set<std::string> declaredFunctions;
-
+    std::vector<std::string_view> autoDecls;
+    
    public:
     Parser(TokenStream& ts) : ts(ts) {}
 

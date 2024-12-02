@@ -4,20 +4,20 @@
 #include <iostream>
 #include <ostream>
 #include <string>
-#include "ast.hpp"
+#include <vector>
 #include "lexer.hpp"
 
 namespace clonk {
 
 class DiagnosticError {
 
-    const std::string_view line;
+    const std::string line;
     const int lineNum;
     const int linePosition;
     const std::string message;
 
    public:
-    DiagnosticError(std::string_view line, int lineNum, int linePosition,
+    DiagnosticError(std::string line, int lineNum, int linePosition,
                     const std::string& message = "")
         : line(line), lineNum(lineNum), linePosition(linePosition), message(message) {}
 
@@ -45,7 +45,7 @@ class DiagnosticsManager {
     }
 
     void unknownToken(const TokenStream& ts) {
-        std::string_view line = ts.getCurrentLine();
+        std::string line = std::string(ts.getCurrentLine());
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
 
@@ -56,7 +56,7 @@ class DiagnosticsManager {
 
     void unexpectedToken(const TokenStream& ts, const Token& token,
                          const std::string& expected = "") {
-        std::string_view line = ts.getCurrentLine();
+        std::string line = std::string(ts.getCurrentLine());
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
 
@@ -76,7 +76,7 @@ class DiagnosticsManager {
     }
 
     void error(const TokenStream& ts, const std::string& message = "") {
-        std::string_view line = ts.getCurrentLine();
+        std::string line = std::string(ts.getCurrentLine());
         int lineNum = ts.getCurrentLineNumber();
         int linePosition = ts.getLinePosition();
 

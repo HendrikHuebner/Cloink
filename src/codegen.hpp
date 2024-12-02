@@ -15,15 +15,17 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 #include "ast.hpp"
 
 namespace clonk {
 
-struct BlockSSAMappings {
+struct SSABlock {
     bool sealed;
-    std::unordered_map<std::string, llvm::Value*> mappings;
+    std::unordered_map<std::string_view, llvm::Value*> mappings;
+    std::vector<std::pair<std::string_view, llvm::PHINode*>> incompletePhis;
 };
 
 class ASTVisitor {
@@ -35,7 +37,7 @@ class ASTVisitor {
     SymbolTable<llvm::Value*> symbolTable;
     std::unordered_map<std::string_view, llvm::AllocaInst*> autoAllocas;
 
-    //std::unordered_map<llvm::BasicBlock*, BlockSSAMappings> blockMappings;
+    std::unordered_map<llvm::BasicBlock*, SSABlock> blockMappings;
     bool currentBBterminated = false;
 
     llvm::Function* currentFunction = nullptr;
@@ -50,6 +52,11 @@ class ASTVisitor {
    public:
     ASTVisitor(llvm::LLVMContext& ctx, llvm::Module& mod, llvm::IRBuilder<>& irBuilder)
         : context(ctx), module(mod), builder(irBuilder) {}
+
+    // SSA construction
+    llvm::Value* readSSAValue(llvm::BasicBlock* BB, std::string_view name);
+    llvm::Value* tryRemovePHI(llvm::PHINode* PN) { return PN; }; // TODO
+    llvm::Value* addPHIOperands(std::string_view name, llvm::PHINode* PN, llvm::BasicBlock* BB);
 
     llvm::Value* visit(const clonk::ASTNode* node);
     llvm::Value* visitExpression(const clonk::Expression* expr, bool getAddr = false);

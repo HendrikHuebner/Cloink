@@ -249,8 +249,8 @@ std::unique_ptr<Function> Parser::parseFunction() {
     std::unique_ptr<Block> block = parseBlock();
 
     checkFunctionParamCounts(ident->name, params.size());
-    auto retval = std::make_unique<Function>(std::move(ident), std::move(params), std::move(block));
-    retval->autoDecls = scopes.collectAutoDecls();
+    auto retval = std::make_unique<Function>(std::move(ident), std::move(params), std::move(block), autoDecls);
+    autoDecls.clear();
     return retval;
 }
 
@@ -340,13 +340,16 @@ std::unique_ptr<Statement> Parser::parseDeclStatement() {
         std::unique_ptr<Expression> expr = parseExpression();
         matchToken(TokenType::EndOfStatement, "\";\"");
 
-        std::string newName =
+        ident->name  =
             scopes.insert(ident->name, ident->name, type == TokenType::KeyRegister, false);
-        if (newName.empty()) {
+
+        if (ident->name.empty()) {
             DiagnosticsManager::get().error(ts, "redeclared identifier \"" + ident->name + "\"");
         }
 
-        ident->name = newName;
+        if (type == TokenType::KeyAuto)
+            autoDecls.push_back(std::string_view(ident->name));
+
         return std::make_unique<Declaration>(type == TokenType::KeyAuto,
                                              type == TokenType::KeyRegister, std::move(ident),
                                              std::move(expr));

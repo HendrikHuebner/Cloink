@@ -36,7 +36,6 @@ struct ScopedSymbol {
 template <typename T>
 class SymbolTable {
     std::unordered_map<std::string_view, std::stack<ScopedSymbol<T>>> symbols;
-    std::vector<std::string_view> autoDecls;
     unsigned currentDepth = 0;
 
    public:
@@ -60,10 +59,6 @@ class SymbolTable {
             }
         }
 
-        // TODO: SSA construction
-        if (/* !isRegister && */ !isFunctionParam)
-            autoDecls.push_back(name);
-
         symbols[name].push(ScopedSymbol<T>(currentDepth, value, name, isRegister, isFunctionParam));
         return std::string(name);
     }
@@ -81,12 +76,6 @@ class SymbolTable {
         }
 
         currentDepth--;
-    }
-
-    std::vector<std::string_view> collectAutoDecls() {
-        auto retval = autoDecls;
-        autoDecls.clear();
-        return retval;
     }
 };
 
@@ -276,8 +265,8 @@ struct Function {
     std::vector<std::string_view> autoDecls;
 
     Function(std::unique_ptr<Identifier> ident, std::vector<std::unique_ptr<Identifier>> params,
-             std::unique_ptr<Block> block)
-        : ident(std::move(ident)), params(std::move(params)), block(std::move(block)) {}
+             std::unique_ptr<Block> block, std::vector<std::string_view> autoDecls)
+        : ident(std::move(ident)), params(std::move(params)), block(std::move(block)), autoDecls(autoDecls) {}
 
     std::string to_string() const {
         std::ostringstream ss;

@@ -5,10 +5,11 @@ SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 HDRS = $(wildcard $(SRC_DIR)/*.hpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
 
-SANITIZER = "-fsanitize=address"
+SANITIZER = 
 CXX = clang++
-CXXFLAGS = -Wall -Wextra -Wno-unused-parameter -std=c++20 -O3
-DEBUGFLAGS = -g3 -O0 $(SANITIZER)
+CXXFLAGS = -Wall -Wextra -Wno-unused-parameter -Wno-format-security -std=c++20 -O3
+DEBUGFLAGS = -g3 -O0
+ASANFLAGS = -g0 -O0 "-fsanitize=address"
 
 LLVM_CONFIG := llvm-config
 LLVM_CPPFLAGS := $(shell $(LLVM_CONFIG) --cppflags)
@@ -20,7 +21,7 @@ TARGET = clonk
 all: $(TARGET)
 
 $(TARGET): $(OBJS) $(HDRS)
-	$(CXX) $(OBJS) $(LLVM_LDFLAGS) $(SANITIZER) $(LLVM_LIBS) -o $(TARGET)
+	$(CXX) $(OBJS) $(LLVM_LDFLAGS) $(LLVM_LIBS) -o $(TARGET)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(LLVM_CPPFLAGS) -c $< -o $@
@@ -34,4 +35,7 @@ clean:
 debug: CXXFLAGS += $(DEBUGFLAGS)
 debug: all
 
-.PHONY: all clean debug
+asan: CXXFLAGS += $(ASANFLAGS)
+asan: LLVM_LDFLAGS += $(ASANFLAGS)
+	
+.PHONY: all clean debug asan

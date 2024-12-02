@@ -1,8 +1,49 @@
 #include "codegen.hpp"
+#include <llvm-19/llvm/IR/BasicBlock.h>
+#include <llvm-19/llvm/IR/Instructions.h>
 #include <llvm/IR/DerivedTypes.h>
+#include "ast.hpp"
 #include "debug.hpp"
 
 using namespace clonk;
+
+llvm::Value* ASTVisitor::addPHIOperands(std::string_view name, llvm::PHINode* PN, llvm::BasicBlock* BB) {
+    for (auto pred = llvm::pred_begin(BB), end = llvm::pred_end(BB); pred != end; ++pred) {
+        PN->addIncoming(readSSAValue(*pred, name), *pred);
+    }
+
+    return tryRemovePHI(PN);
+}
+
+llvm::Value* ASTVisitor::readSSAValue(llvm::BasicBlock* BB, std::string_view name) {
+    SSABlock& blockMapping = blockMappings[BB];
+    std::string n = BB->getName().str();
+
+    llvm::Value* value;
+    if ((value = blockMapping.mappings[name])) {
+        return value;
+    }
+
+    if (!blockMapping.sealed) {
+        llvm::PHINode* PN = builder.CreatePHI(builder.getInt64Ty(), 2);
+        PN->moveBefore(&*BB->getFirstInsertionPt());
+        blockMapping.incompletePhis.emplace_back(name, PN);
+        value = PN;
+    
+    } else if (BB->hasNPredecessors(1)) {
+        value = readSSAValue(BB->getSinglePredecessor(), name);
+
+    } else {
+        llvm::PHINode* PN = builder.CreatePHI(builder.getInt64Ty(), 2);
+        PN->moveBefore(&*BB->getFirstInsertionPt());
+        blockMapping.mappings[name] = PN;
+        value = addPHIOperands(name, PN, BB);
+    }
+
+    blockMapping.mappings[name] = value;
+    return value;
+
+}
 
 llvm::Value* ASTVisitor::visit(const clonk::ASTNode* node) {
     if (auto* expr = dynamic_cast<const clonk::Expression*>(node)) {
@@ -51,12 +92,17 @@ llvm::Value* ASTVisitor::visitStatement(const clonk::Statement* stmt) {
     return nullptr;
 }
 
-llvm::Value* ASTVisitor::visitIdentifier(const clonk::Identifier* id) {
-    auto opt = symbolTable.get(id->name);
-    if (opt)
+llvm::Value* ASTVisitor::visitIdentifier(const clonk::Identifier* ident) {
+    auto opt = symbolTable.get(ident->name);
+    if (opt) {
+        if(opt->isRegister || opt->isFunctionParam) {
+            return readSSAValue(builder.GetInsertBlock(), ident->name);
+        }
+
         return opt->value;
-    else
-        return nullptr;
+    }
+    
+    return nullptr;
 }
 
 llvm::Value* ASTVisitor::visitIntLiteral(const clonk::IntLiteral* lit) {
@@ -79,6 +125,15 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
     }
 
     if (binOp->op == clonk::OpAssign) {
+        if (!left->getType()->isPointerTy()) {
+            if (const clonk::Identifier* ident = dynamic_cast<const clonk::Identifier*>(binOp->leftExpr.get())) {
+                blockMappings[builder.GetInsertBlock()].mappings[ident->name] = right;
+                return right;
+            } else {
+                assert(false && "trying to assign non pointer that isnt a variable");
+            }
+        }
+
         builder.CreateStore(right, left);
         return right;
     }
@@ -123,11 +178,14 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
             return allowBoolResult ? value : builder.CreateSExt(value, builder.getInt64Ty());
         }
         case clonk::OpLogicalAnd: {
-            llvm::BasicBlock* entry = builder.GetInsertBlock();
+            llvm::BasicBlock* entryBB = builder.GetInsertBlock();
             llvm::BasicBlock* rhsBB =
                 llvm::BasicBlock::Create(context, "rhs", builder.GetInsertBlock()->getParent());
             llvm::BasicBlock* endBB =
                 llvm::BasicBlock::Create(context, "end", builder.GetInsertBlock()->getParent());
+            
+            blockMappings[rhsBB].sealed = true;
+            blockMappings[endBB].sealed = false;
 
             llvm::Value* leftFalse = builder.CreateIsNull(left);
             builder.CreateCondBr(leftFalse, endBB, rhsBB);
@@ -142,20 +200,29 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
             llvm::Value* result =
                 builder.CreateSelect(rightVal, builder.getInt64(0), builder.getInt64(1));
             builder.CreateBr(endBB);
-
             builder.SetInsertPoint(endBB);
+
+            blockMappings[endBB].sealed = true;
+            for (auto& entry : blockMappings[endBB].incompletePhis) {
+                addPHIOperands(entry.first, entry.second, endBB);
+            }
+            
             llvm::PHINode* phiNode = builder.CreatePHI(llvm::Type::getInt64Ty(context), 2);
             phiNode->addIncoming(result, rhsBB);
-            phiNode->addIncoming(builder.getInt64(0), entry);
+            phiNode->addIncoming(builder.getInt64(0), entryBB);
             return phiNode;
         }
 
         case clonk::OpLogicalOr: {
-            llvm::BasicBlock* entry = builder.GetInsertBlock();
+            llvm::BasicBlock* entryBB = builder.GetInsertBlock();
             llvm::BasicBlock* rhsBB =
                 llvm::BasicBlock::Create(context, "rhs", builder.GetInsertBlock()->getParent());
             llvm::BasicBlock* endBB =
                 llvm::BasicBlock::Create(context, "end", builder.GetInsertBlock()->getParent());
+            
+            blockMappings[rhsBB].sealed = true;
+            blockMappings[endBB].sealed = false;
+
             llvm::Value* leftTrue = builder.CreateIsNull(left);
             builder.CreateCondBr(leftTrue, rhsBB, endBB);
 
@@ -168,13 +235,18 @@ llvm::Value* ASTVisitor::visitBinOp(const clonk::BinOp* binOp, bool allowBoolRes
             llvm::Value* rightVal = builder.CreateIsNull(right);
             llvm::Value* result =
                 builder.CreateSelect(rightVal, builder.getInt64(0), builder.getInt64(1));
+            
+            blockMappings[endBB].sealed = true;
+            for (auto& entry : blockMappings[endBB].incompletePhis) {
+                addPHIOperands(entry.first, entry.second, endBB);
+            }
+
             builder.CreateBr(endBB);
             builder.SetInsertPoint(endBB);
 
             llvm::PHINode* phiNode = builder.CreatePHI(llvm::Type::getInt64Ty(context), 2);
             phiNode->addIncoming(result, rhsBB);
-            phiNode->addIncoming(builder.getInt64(1), entry);
-
+            phiNode->addIncoming(builder.getInt64(1), entryBB);
             return phiNode;
         }
 
@@ -254,21 +326,20 @@ llvm::Value* ASTVisitor::visitFunctionCall(const clonk::FunctionCall* funcCall) 
 }
 
 llvm::Value* ASTVisitor::visitDeclaration(const clonk::Declaration* decl) {
-    //llvm::Type* type = llvm::Type::getInt64Ty(context);
-    // create allocas at the start of block
-    //llvm::AllocaInst* alloc = builder.CreateAlloca(type, nullptr, decl->ident->name);
-    llvm::AllocaInst* alloc = autoAllocas[decl->ident->name];
-    assert(alloc && "missing alloca");
+    llvm::Value* exprValue = visit(decl->expr.get());
 
-    if (decl->expr) {
-        llvm::Value* exprValue = visit(decl->expr.get());
+    if (decl->isRegister) {
+        blockMappings[builder.GetInsertBlock()].mappings[decl->ident->name] = exprValue;
+        symbolTable.insert(decl->ident->name, exprValue, true, false);
+        return exprValue;
+
+    } else {
+        llvm::AllocaInst* alloc = autoAllocas[decl->ident->name];
+        assert(alloc && "missing alloca");
         builder.CreateStore(exprValue, alloc);
-
-        //blockMappings[builder.GetInsertBlock()].mappings[decl->ident->name] = alloc;
+        symbolTable.insert(decl->ident->name, alloc, decl->isRegister, false);
+        return alloc;
     }
-
-    symbolTable.insert(decl->ident->name, alloc, decl->isRegister, false);
-    return alloc;
 }
 
 llvm::Value* ASTVisitor::visitReturnStatement(const clonk::ReturnStatement* returnStmt) {
@@ -307,8 +378,10 @@ llvm::Value* ASTVisitor::visitWhileStatement(const clonk::WhileStatement* whileS
 
     llvm::BasicBlock* loopCondBB =
         llvm::BasicBlock::Create(context, loopName + ".cond", currentFunction);
+
     builder.CreateBr(loopCondBB);
     builder.SetInsertPoint(loopCondBB);
+    blockMappings[loopCondBB].sealed = false;
 
     llvm::Value* condition = visit(whileStmt->condition.get());
     llvm::BasicBlock* loopBodyBB = nullptr;
@@ -316,19 +389,26 @@ llvm::Value* ASTVisitor::visitWhileStatement(const clonk::WhileStatement* whileS
         llvm::BasicBlock::Create(context, loopName + ".end", currentFunction);
 
     if (llvm::Constant* constCond = llvm::dyn_cast<llvm::Constant>(condition)) {
+        blockMappings[loopCondBB].sealed = true;
+
         if (constCond->isZeroValue()) {
             builder.CreateBr(loopEndBB);
             builder.SetInsertPoint(loopEndBB);
+            blockMappings[loopEndBB].sealed = true;
+
             return nullptr;
 
         } else {
             // while (true)
             loopBodyBB = llvm::BasicBlock::Create(context, loopName + ".body", currentFunction);
             builder.CreateBr(loopBodyBB);
+            blockMappings[loopBodyBB].sealed = true;
         }
     } else {
         // Conditional branch
         loopBodyBB = llvm::BasicBlock::Create(context, loopName + ".body", currentFunction);
+        blockMappings[loopBodyBB].sealed = true;
+
         if (condition->getType()->isPointerTy()) {
             condition = builder.CreateLoad(ty, condition, condition->getName() + ".val");
         }
@@ -340,9 +420,14 @@ llvm::Value* ASTVisitor::visitWhileStatement(const clonk::WhileStatement* whileS
     builder.SetInsertPoint(loopBodyBB);
     visitStatement(whileStmt->statement.get());
     terminateBB(loopCondBB);
+
+    blockMappings[loopCondBB].sealed = true;
+    for (auto& entry : blockMappings[loopCondBB].incompletePhis) {
+        addPHIOperands(entry.first, entry.second, loopCondBB);
+    }
+
     builder.SetInsertPoint(loopEndBB);
-    //llvm::PHINode* PN = builder.CreatePHI(llvm::Type::getInt64Ty(context), 2,  "phi." + loopName);
-    //PN->addIncoming(loopValue, loopBodyBB);
+    blockMappings[loopEndBB].sealed = true;
 
     return nullptr;
 }
@@ -355,9 +440,9 @@ llvm::Value* ASTVisitor::visitIfStatement(const clonk::IfStatement* ifStmt) {
         llvm::BasicBlock::Create(context, ifname + ".cond", currentFunction);
     builder.CreateBr(ifCondBB);
     builder.SetInsertPoint(ifCondBB);
+    blockMappings[ifCondBB].sealed = true;
 
     llvm::Value* condition;
-
     if (auto binOp = dynamic_cast<const BinOp*>(ifStmt->condition.get())) {
         condition = visitBinOp(binOp, true);
     } else {
@@ -365,9 +450,14 @@ llvm::Value* ASTVisitor::visitIfStatement(const clonk::IfStatement* ifStmt) {
     }
 
     llvm::BasicBlock* ifEndBB = llvm::BasicBlock::Create(context, ifname + ".end", currentFunction);
+    blockMappings[ifEndBB].sealed = false;
 
     // check constant in if condition
     if (llvm::Constant* constCond = llvm::dyn_cast<llvm::Constant>(condition)) {
+
+        // Only one path to if.end
+        blockMappings[ifEndBB].sealed = true;
+
         if (constCond->isZeroValue()) {
             llvm::Value* value = nullptr;
             if (ifStmt->elseStatement) {
@@ -398,33 +488,35 @@ llvm::Value* ASTVisitor::visitIfStatement(const clonk::IfStatement* ifStmt) {
     }
 
     llvm::Value* conditionValue = builder.CreateIsNull(condition);
+    blockMappings[ifBodyBB].sealed = true;
 
     // check if else statement exists
     if (!ifStmt->elseStatement) {
         builder.CreateCondBr(conditionValue, ifEndBB, ifBodyBB);
-
         builder.SetInsertPoint(ifBodyBB);
+
         visitStatement(ifStmt->statement.get());
         terminateBB(ifEndBB);
 
     } else {
         builder.CreateCondBr(conditionValue, elseBodyBB, ifBodyBB);
-
         builder.SetInsertPoint(ifBodyBB);
+
         visitStatement(ifStmt->statement.get());
         terminateBB(ifEndBB);
 
         builder.SetInsertPoint(elseBodyBB);
+        blockMappings[elseBodyBB].sealed = true;
         visitStatement(ifStmt->elseStatement->get());
         terminateBB(ifEndBB);
     }
 
+    blockMappings[ifEndBB].sealed = true;
+    for (auto& entry : blockMappings[ifEndBB].incompletePhis) {
+        addPHIOperands(entry.first, entry.second, ifEndBB);
+    }
+
     builder.SetInsertPoint(ifEndBB);
-    //llvm::PHINode* PN = builder.CreatePHI(llvm::Type::getInt64Ty(context), 2, "phi." + ifname);
-
-    //PN->addIncoming(ifValue, ifBodyBB);
-    //PN->addIncoming(elseValue, elseBodyBB);
-
     return nullptr;
 }
 
@@ -440,22 +532,19 @@ llvm::Function* ASTVisitor::visitFunction(const clonk::Function* func) {
                                                       func->ident->name, module);
 
     llvm::BasicBlock* BB = llvm::BasicBlock::Create(context, "entry", llvmFunc);
-    //blockMappings[BB].sealed = true;
+    
+    blockMappings[BB].sealed = true;
     builder.SetInsertPoint(BB);
     this->currentFunction = llvmFunc;
 
     auto paramIt = func->params.begin();
     for (llvm::Argument& llvmParam : llvmFunc->args()) {
         llvmParam.setName((*paramIt)->name);
-
-        llvm::AllocaInst* alloc = builder.CreateAlloca(ty, nullptr, (*paramIt)->name);
-        builder.CreateStore(&llvmParam, alloc);
-        symbolTable.insert((*paramIt)->name, alloc, false, true);
-
+        blockMappings[BB].mappings[(*paramIt)->name] = &llvmParam;
+        symbolTable.insert((*paramIt)->name, nullptr, false, true);
         ++paramIt;
     }
 
-    //std::vector<std::string> autoVariables = collectAutoDecls(func->block.get());
     for (std::string_view varName : func->autoDecls) {
         autoAllocas[varName] = builder.CreateAlloca(ty, nullptr, varName);
     }
