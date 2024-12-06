@@ -1,6 +1,6 @@
 #include "codegen.hpp"
-#include <llvm-19/llvm/IR/BasicBlock.h>
-#include <llvm-19/llvm/IR/Instructions.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/DerivedTypes.h>
 #include "ast.hpp"
 #include "debug.hpp"

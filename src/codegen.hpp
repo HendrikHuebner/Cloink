@@ -78,10 +78,10 @@ class ASTVisitor {
 inline std::unique_ptr<llvm::Module> createModule(llvm::LLVMContext& ctx, const std::string& name,
                                                   const AbstractSyntaxTree& ast) {
     auto module = std::make_unique<llvm::Module>(name, ctx);
-    auto builder = std::make_unique<llvm::IRBuilder<>>(ctx);
-    auto astVisitor = std::make_unique<ASTVisitor>(ctx, *module, *builder);
+    auto builder = llvm::IRBuilder<>(ctx);
+    auto astVisitor = ASTVisitor(ctx, *module, builder);
 
-    llvm::Type* ty = builder->getInt64Ty();
+    llvm::Type* ty = builder.getInt64Ty();
 
     // declare extern functions
     for (const std::pair<std::string, int>& externFunc : ast.getExternFunctions()) {
@@ -93,7 +93,7 @@ inline std::unique_ptr<llvm::Module> createModule(llvm::LLVMContext& ctx, const 
     }
 
     for (const std::unique_ptr<clonk::Function>& func : ast.getFunctions()) {
-        astVisitor->visitFunction(func.get());
+        astVisitor.visitFunction(func.get());
     }
 
     return module;
